@@ -1,0 +1,25 @@
+# Gradle
+.gradle/
+build/
+*/build/
+local.properties
+
+# Android
+*.apk
+*.aab
+captures/
+
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.flutter/
+
+# JS
+node_modules/
+web-dashboard/dist/
+
+# OS
+.DS_Store

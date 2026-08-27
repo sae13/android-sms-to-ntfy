@@ -1,0 +1,56 @@
+<resources>
+    <string name="app_name">SMS-to-Ntfy</string>
+    <string name="app_name_short">SMS-Ntfy</string>
+    
+    <!-- Service Notification -->
+    <string name="notification_channel_id">sms_forwarding_service</string>
+    <string name="notification_channel_name">SMS Forwarding Service</string>
+    <string name="notification_channel_description">Forwards SMS and calls to ntfy server</string>
+    <string name="notification_title">SMS-to-Ntfy Active</string>
+    <string name="notification_text">Forwarding SMS and calls to ntfy server</string>
+    <string name="notification_text_connecting">Connecting to ntfy server…</string>
+    <string name="notification_text_error">Connection error - retrying</string>
+    
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="ntfy_server_url">Ntfy Server URL</string>
+    <string name="ntfy_server_url_hint">https://your-ntfy-server.com</string>
+    <string name="ntfy_topic">Topic</string>
+    <string name="ntfy_topic_hint">sms-alerts</string>
+    <string name="ntfy_username">Username (optional)</string>
+    <string name="ntfy_password">Password (optional)</string>
+    <string name="reply_topic">Reply Topic</string>
+    <string name="reply_topic_hint">sms-replies</string>
+    <string name="enable_sms_forwarding">Enable SMS Forwarding</string>
+    <string name="enable_call_forwarding">Enable Call Forwarding</string>
+    <string name="enable_sse_replies">Enable SSE Replies</string>
+    <string name="battery_optimization_warning">Disable battery optimization for reliable service</string>
+    <string name="open_battery_settings">Open Battery Settings</string>
+    <string name="test_connection">Test Connection</string>
+    <string name="save_settings">Save</string>
+    
+    <!-- Status -->
+    <string name="status_connected">Connected</string>
+    <string name="status_disconnected">Disconnected</string>
+    <string name="status_connecting">Connecting…</string>
+    <string name="status_error">Error</string>
+    
+    <!-- Logs -->
+    <string name="logs_title">Event Logs</string>
+    <string name="log_sms_received">SMS Received</string>
+    <string name="log_sms_forwarded">SMS Forwarded</string>
+    <string name="log_call_received">Call Received</string>
+    <string name="log_call_forwarded">Call Forwarded</string>
+    <string name="log_sse_connected">SSE Connected</string>
+    <string name="log_sse_disconnected">SSE Disconnected</string>
+    <string name="log_sse_message">SSE Message Received</string>
+    <string name="log_sms_sent">Reply SMS Sent</string>
+    <string name="log_error">Error</string>
+    
+    <!-- UI -->
+    <string name="toggle_service">Toggle Service</string>
+    <string name="service_running">Service Running</string>
+    <string name="service_stopped">Service Stopped</string>
+    <string name="last_event">Last Event</string>
+    <string name="no_events_yet">No events yet</string>
+</resources>

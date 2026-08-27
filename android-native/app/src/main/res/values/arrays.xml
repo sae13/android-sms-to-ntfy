@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="ntfy_priorities">
+        <item>Min (1) - Silent</item>
+        <item>Low (2)</item>
+        <item>Default (3)</item>
+        <item>High (4) - Default</item>
+        <item>Max (5) - Critical</item>
+    </string-array>
+</resources>
