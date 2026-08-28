@@ -18,13 +18,16 @@ object WakeLockHelper {
     fun acquireWakeLock(context: Context, timeoutMs: Long = 60_000L) {
         try {
             val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-            if (wakeLock?.isHeld == true) return
+            if (wakeLock?.isHeld == true) {
+                wakeLock?.acquire(timeoutMs)
+                return
+            }
 
             wakeLock = powerManager.newWakeLock(
                 PowerManager.PARTIAL_WAKE_LOCK,
                 WAKE_LOCK_TAG
             ).apply {
-                setReferenceCounted(false)
+                setReferenceCounted(true)
                 acquire(timeoutMs)
             }
         } catch (e: Exception) {
@@ -35,8 +38,10 @@ object WakeLockHelper {
     @Synchronized
     fun releaseWakeLock() {
         try {
-            wakeLock?.let { if (it.isHeld) it.release() }
-            wakeLock = null
+            wakeLock?.let {
+                if (it.isHeld) it.release()
+                if (!it.isHeld) wakeLock = null
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to release WakeLock", e)
         }

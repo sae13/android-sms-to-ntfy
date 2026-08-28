@@ -1,7 +1,7 @@
 # Business Goals
 
 ## Vision
-Create a fully functional Android application (Native Kotlin, Flutter, KMP) that forwards incoming SMS and calls to a self-hosted ntfy server, enabling remote SMS replies via SSE, and a professional web dashboard with live event simulator, Persian Sahel font, and real-time logs.
+Create a fully functional native Kotlin Android application that forwards incoming SMS and calls to a self-hosted ntfy server, enables remote SMS replies via SSE, and includes a professional web dashboard. KMP remains an experimental scaffold without production feature parity.
 
 ## SMART Objectives
 

@@ -58,48 +58,18 @@ class CallReceiver : BroadcastReceiver() {
                         state == TelephonyManager.CALL_STATE_RINGING -> {
                             // Incoming call
                             incomingNumber = phoneNumber
-                            val serviceIntent = Intent(contextRef!!, SmsForwardingService::class.java).apply {
-                                action = SmsForwardingService.ACTION_PROCESS_CALL
-                                putExtra(SmsForwardingService.EXTRA_CALL_NUMBER, phoneNumber)
-                                putExtra(SmsForwardingService.EXTRA_CALL_STATE, "ringing")
-                            }
-
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                contextRef!!.startForegroundService(serviceIntent)
-                            } else {
-                                contextRef!!.startService(serviceIntent)
-                            }
+                            startCallService(phoneNumber, "ringing")
                         }
                         state == TelephonyManager.CALL_STATE_OFFHOOK -> {
                             // Call answered (outgoing or incoming)
                             if (lastState == TelephonyManager.CALL_STATE_RINGING) {
                                 // Incoming call was answered
-                                val serviceIntent = Intent(contextRef!!, SmsForwardingService::class.java).apply {
-                                    action = SmsForwardingService.ACTION_PROCESS_CALL
-                                    putExtra(SmsForwardingService.EXTRA_CALL_NUMBER, incomingNumber)
-                                    putExtra(SmsForwardingService.EXTRA_CALL_STATE, "answered")
-                                }
-
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                    contextRef!!.startForegroundService(serviceIntent)
-                                } else {
-                                    contextRef!!.startService(serviceIntent)
-                                }
+                                startCallService(incomingNumber, "answered")
                             }
                         }
                         state == TelephonyManager.CALL_STATE_IDLE && lastState == TelephonyManager.CALL_STATE_RINGING -> {
                             // Missed call (was ringing, now idle without being answered)
-                            val serviceIntent = Intent(contextRef!!, SmsForwardingService::class.java).apply {
-                                action = SmsForwardingService.ACTION_PROCESS_CALL
-                                putExtra(SmsForwardingService.EXTRA_CALL_NUMBER, incomingNumber)
-                                putExtra(SmsForwardingService.EXTRA_CALL_STATE, "missed")
-                            }
-
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                contextRef!!.startForegroundService(serviceIntent)
-                            } else {
-                                contextRef!!.startService(serviceIntent)
-                            }
+                            startCallService(incomingNumber, "missed")
                         }
                     }
 
@@ -109,6 +79,31 @@ class CallReceiver : BroadcastReceiver() {
 
             // Listen for call state changes
             telephonyManager?.listen(listener!!, PhoneStateListener.LISTEN_CALL_STATE)
+        }
+    }
+
+    private fun startCallService(number: String, state: String) {
+        val context = contextRef ?: return
+        if (number.isBlank()) {
+            Log.w(TAG, "Ignoring $state call event without a phone number")
+            return
+        }
+        val serviceIntent = Intent(context, SmsForwardingService::class.java).apply {
+            action = SmsForwardingService.ACTION_PROCESS_CALL
+            putExtra(SmsForwardingService.EXTRA_CALL_NUMBER, number)
+            putExtra(SmsForwardingService.EXTRA_CALL_STATE, state)
+        }
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent)
+            } else {
+                context.startService(serviceIntent)
+            }
+        } catch (error: Exception) {
+            Log.e(TAG, "Failed to start call forwarding service", error)
+        } catch (error: LinkageError) {
+            Log.e(TAG, "Failed to start call forwarding service", error)
         }
     }
 

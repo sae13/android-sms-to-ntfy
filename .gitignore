@@ -19,15 +19,15 @@ captures/
 # Signing secrets
 *.jks
 *.keystore
+*.key
+*.pem
+*.p12
 keystore.properties
 
-# Flutter generated files
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-.packages
-.pub-cache/
-.flutter/
+# Private local environments
+.env
+.env.*
+!.env.example
 
 # JavaScript
 node_modules/
@@ -46,4 +46,7 @@ Thumbs.db
 
 # Logs and temporary files
 *.log
+androguard.db
+androguard.db-shm
+androguard.db-wal
 *.tmp

@@ -8,11 +8,9 @@ A zero-Google SMS/call gateway for Android with a professional web dashboard.
 
 ## Modules
 
-- `native-kotlin/` — Android Studio native Kotlin implementation.
-- `flutter-app/` — Flutter implementation scaffold with the same settings model.
-- `kmp-app/` — Kotlin Multiplatform shared core and Android app scaffold.
-- `web-dashboard/` — Persian/English dashboard with Sahel font, live simulator, SSE listener, logs, settings, source-code download links.
-- `dist/` — generated ZIP packages.
+- `android-native/` — production Android Studio native Kotlin implementation.
+- `kmp/` — experimental Kotlin Multiplatform shared core and Android app scaffold; not production-parity.
+- `web/` — Persian/English static dashboard with Sahel font, live simulator, SSE listener, logs, and settings.
 
 ## Core behavior
 
@@ -29,20 +27,13 @@ A zero-Google SMS/call gateway for Android with a professional web dashboard.
 Native Android:
 
 ```bash
-cd native-kotlin
+cd android-native
 ./gradlew assembleDebug
 ```
 
 Web dashboard:
 
 ```bash
-cd web-dashboard
-npm install
-npm run build
-```
-
-Package ZIP files:
-
-```bash
-python3 scripts/package.py
+cd web
+python3 -m http.server 8080
 ```

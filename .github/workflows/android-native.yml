@@ -101,7 +101,8 @@ jobs:
       - name: Verify release APK
         run: |
           test -s "$RELEASE_APK"
-          "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner" verify --verbose "$RELEASE_APK"
+          BUILD_TOOLS_DIR="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V | tail -1)"
+          "$ANDROID_HOME/build-tools/$BUILD_TOOLS_DIR/apksigner" verify --verbose "$RELEASE_APK"
           sha256sum "$RELEASE_APK"
           unzip -t "$RELEASE_APK"
           cp "$RELEASE_APK" "$RUNNER_TEMP/$RELEASE_ASSET"

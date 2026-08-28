@@ -5,13 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.provider.Telephony
-import android.telephony.SmsMessage
 import android.util.Log
 import com.smsntfy.service.SmsForwardingService
 import com.smsntfy.util.WakeLockHelper
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
 /**
  * BroadcastReceiver for incoming SMS messages.
@@ -38,24 +34,44 @@ class SmsReceiver : BroadcastReceiver() {
         // Acquire WakeLock to prevent Doze mode from killing processing
         WakeLockHelper.acquireWakeLock(context, 60_000)
 
-        // Parse SMS messages from intent
-        val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
-        if (messages.isEmpty()) {
-            Log.w(TAG, "No SMS messages found in intent")
+        try {
+            // Parse SMS messages from intent
+            val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
+            if (messages.isEmpty()) {
+                Log.w(TAG, "No SMS messages found in intent")
+                WakeLockHelper.releaseWakeLock()
+                return
+            }
+
+            val senders = Array(messages.size) { index -> messages[index].originatingAddress.orEmpty() }
+            val bodies = Array(messages.size) { index -> messages[index].messageBody.orEmpty() }
+            val timestamps = LongArray(messages.size) { index -> messages[index].timestampMillis }
+
+            if (senders.any { it.isEmpty() } || bodies.any { it.isEmpty() }) {
+                Log.w(TAG, "SMS contains an empty sender or body")
+                WakeLockHelper.releaseWakeLock()
+                return
+            }
+
+            // Start the service to handle SMS processing
+            val serviceIntent = Intent(context, SmsForwardingService::class.java).apply {
+                action = SmsForwardingService.ACTION_PROCESS_SMS
+                putExtra(SmsForwardingService.EXTRA_SMS_SENDERS, senders)
+                putExtra(SmsForwardingService.EXTRA_SMS_BODIES, bodies)
+                putExtra(SmsForwardingService.EXTRA_SMS_TIMESTAMPS, timestamps)
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent)
+            } else {
+                context.startService(serviceIntent)
+            }
+        } catch (error: Exception) {
             WakeLockHelper.releaseWakeLock()
-            return
-        }
-
-        // Start the service to handle SMS processing
-        val serviceIntent = Intent(context, SmsForwardingService::class.java).apply {
-            action = SmsForwardingService.ACTION_PROCESS_SMS
-            putExtra(SmsForwardingService.EXTRA_SMS_MESSAGES, messages)
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(serviceIntent)
-        } else {
-            context.startService(serviceIntent)
+            Log.e(TAG, "Failed to hand SMS to forwarding service", error)
+        } catch (error: LinkageError) {
+            WakeLockHelper.releaseWakeLock()
+            Log.e(TAG, "Failed to hand SMS to forwarding service", error)
         }
 
         // Don't abort broadcast - let other apps (like default SMS app) also receive it

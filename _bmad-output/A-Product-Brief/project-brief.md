@@ -4,7 +4,7 @@
 SMS-to-Ntfy Android App with Web Dashboard
 
 ## Vision
-Create a fully functional Android application (Native Kotlin, Flutter, KMP) that forwards incoming SMS and calls to a self-hosted ntfy server, enabling remote SMS replies via SSE, and a professional web dashboard with live event simulator, Persian Sahel font, and real-time logs.
+Create a fully functional native Kotlin Android application that forwards incoming SMS and calls to a self-hosted ntfy server, enables remote SMS replies via SSE, and includes a professional web dashboard. Retain KMP as an experimental scaffold rather than claiming feature parity.
 
 ## Target Users
 - Individuals and small businesses needing SMS/call forwarding to personal servers.
@@ -16,7 +16,7 @@ Create a fully functional Android application (Native Kotlin, Flutter, KMP) that
 - Incoming call alerts sent to ntfy.
 - Remote SMS reply via SSE working 24/7 with battery optimizations.
 - Web dashboard built with Professional Polish theme, Sahel font, live simulator, SSE logs.
-- APK and source code available for direct download as ZIP for all three stacks.
+- A signed APK is published for the native Android app; source code remains available for the native app and the experimental KMP scaffold.
 - Zero dependency on Google Play Services; works on local LAN.
 
 ## Constraints
@@ -25,10 +25,10 @@ Create a fully functional Android application (Native Kotlin, Flutter, KMP) that
 - Must auto-start on BOOT_COMPLETED.
 - Must provide guidance to disable battery optimizations per brand (Xiaomi, Samsung, Huawei).
 - Web dashboard must use Persian Sahel font, support bilingual layout.
-- Source code must be ready to build in Android Studio, Flutter, KMP environments.
+- The native app must be ready to build in Android Studio; the KMP scaffold is maintained separately without production-parity guarantees.
 
 ## Platform Strategy
-- Android: Native Kotlin (primary), Flutter, Kotlin Multiplatform.
+- Android: Native Kotlin is the production app; Kotlin Multiplatform remains experimental.
 - Web: Responsive dashboard using modern HTML/CSS/JS (or React/Vue) with SSE client.
 - Communication: Direct HTTP/SSE to self-hosted ntfy server.
 

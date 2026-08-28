@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    package="com.smsntfy">
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -66,7 +65,11 @@
             android:name=".service.SmsForwardingService"
             android:exported="false"
             android:foregroundServiceType="dataSync|specialUse|phoneCall"
-            android:stopWithTask="false" />
+            android:stopWithTask="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Forward incoming SMS and call events to the user-configured self-hosted ntfy server and maintain the reply listener." />
+        </service>
 
         <!-- SMS Broadcast Receiver (Priority 999) -->
         <receiver

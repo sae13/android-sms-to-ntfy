@@ -10,7 +10,6 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
-import android.telephony.SmsMessage
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.smsntfy.R
@@ -52,7 +51,9 @@ class SmsForwardingService : Service() {
         const val ACTION_SEND_REPLY = "SEND_REPLY"
 
         // Extras
-        const val EXTRA_SMS_MESSAGES = "sms_messages"
+        const val EXTRA_SMS_SENDERS = "sms_senders"
+        const val EXTRA_SMS_BODIES = "sms_bodies"
+        const val EXTRA_SMS_TIMESTAMPS = "sms_timestamps"
         const val EXTRA_CALL_NUMBER = "call_number"
         const val EXTRA_CALL_STATE = "call_state"
         const val EXTRA_REPLY_NUMBER = "reply_number"
@@ -72,20 +73,30 @@ class SmsForwardingService : Service() {
         super.onCreate()
         Log.d(TAG, "Service created")
 
-        val app = application as SmsNtfyApplication
-        ntfyClient = app.ntfyClient
-        sseClient = app.sseClient
-        database = app.database
-        prefs = app.preferences
-        callReceiver = CallReceiver()
-
         createNotificationChannel()
-        startCallListener()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val action = intent?.action ?: ACTION_START_SERVICE
+        val app = application as SmsNtfyApplication
+        val action = intent?.action ?: ServiceStartPolicy.actionForRestart(
+            isPersistent = app.preferences.isServiceRunning
+        )
+        if (action == null) {
+            Log.w(TAG, "Ignoring service restart without an active persistent service")
+            return START_NOT_STICKY
+        }
         Log.d(TAG, "onStartCommand: action=$action")
+
+        if (!ServiceStartPolicy.isKnown(action)) {
+            Log.w(TAG, "Unknown service action: $action")
+            return START_NOT_STICKY
+        }
+
+        if (ServiceStartPolicy.requiresImmediateForeground(action)) {
+            ensureForegroundStarted()
+        }
+
+        ensureDependenciesInitialized(app)
 
         when (action) {
             ACTION_START_SERVICE -> startServiceInternal()
@@ -95,22 +106,23 @@ class SmsForwardingService : Service() {
             ACTION_SEND_REPLY -> sendSmsReplyIntent(intent!!)
         }
 
-        return START_STICKY
+        return if (action == ACTION_START_SERVICE) START_STICKY else START_NOT_STICKY
+    }
+
+    private fun ensureDependenciesInitialized(app: SmsNtfyApplication) {
+        if (prefs != null && ntfyClient != null && sseClient != null && database != null) return
+
+        ntfyClient = app.ntfyClient
+        sseClient = app.sseClient
+        database = app.database
+        prefs = app.preferences
+        callReceiver = CallReceiver()
+        startCallListener()
     }
 
     private fun startServiceInternal() {
         Log.d(TAG, "Starting foreground service")
         prefs?.isServiceRunning = true
-
-        // Create and show notification
-        val notification = createNotification(getString(R.string.notification_text_connecting))
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
-        }
 
         // Start SSE connection if enabled
         if (prefs?.enableSse == true) {
@@ -121,6 +133,19 @@ class SmsForwardingService : Service() {
         updateNotification(getString(R.string.notification_text))
 
         Log.d(TAG, "Foreground service started successfully")
+    }
+
+    private fun ensureForegroundStarted() {
+        val notification = createNotification(getString(R.string.notification_text_connecting))
+        if (ServiceStartPolicy.supportsTypedForeground(Build.VERSION.SDK_INT)) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
     }
 
     private fun stopServiceInternal() {
@@ -134,30 +159,37 @@ class SmsForwardingService : Service() {
     }
 
     private fun processSmsIntent(intent: Intent) {
-        val messages = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            intent.getParcelableArrayExtra(EXTRA_SMS_MESSAGES, SmsMessage::class.java)?.toList()
-        } else {
-            @Suppress("DEPRECATION")
-            intent.getParcelableArrayExtra(EXTRA_SMS_MESSAGES)?.filterIsInstance<SmsMessage>()
-        }
-        if (messages == null || messages.isEmpty()) {
+        val messages = SmsPayload.fromParts(
+            senders = intent.getStringArrayExtra(EXTRA_SMS_SENDERS),
+            bodies = intent.getStringArrayExtra(EXTRA_SMS_BODIES),
+            timestamps = intent.getLongArrayExtra(EXTRA_SMS_TIMESTAMPS)
+        )
+        if (messages.isEmpty()) {
             Log.w(TAG, "No SMS messages to process")
+            WakeLockHelper.releaseWakeLock()
             return
         }
 
         ioScope.launch {
             for (message in messages) {
-                processSmsMessage(message)
+                try {
+                    processSmsMessage(message)
+                } catch (error: Exception) {
+                    Log.e(TAG, "Failed while processing SMS from ${message.sender}", error)
+                } catch (error: LinkageError) {
+                    Log.e(TAG, "Failed while processing SMS from ${message.sender}", error)
+                }
             }
+            WakeLockHelper.releaseWakeLock()
         }
     }
 
-    private suspend fun processSmsMessage(message: SmsMessage) {
-        val sender = message.originatingAddress ?: ""
-        val body = message.messageBody ?: ""
-        val timestamp = message.timestampMillis
+    private suspend fun processSmsMessage(message: SmsPayload) {
+        val sender = message.sender
+        val body = message.body
+        val timestamp = message.timestamp
 
-        if (sender.isEmpty() || body.isEmpty()) {
+        if (sender.isBlank() || body.isEmpty()) {
             Log.w(TAG, "Empty sender or body, skipping")
             return
         }

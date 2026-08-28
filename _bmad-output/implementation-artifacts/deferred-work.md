@@ -1,3 +1,5 @@
-- source_spec: `/home/saeb/Documents/sms-ntfy/_bmad-output/implementation-artifacts/spec-publish-usable-android-release.md`
-  summary: حذف کامل پیادهسازی فلاتر و اصلاح ارجاعهای باقیمانده پس از انتشار فایل نصب اندروید نیتیو.
-  evidence: کاربر صریحاً ترتیب «ابتدا انتشار فایل نصب، سپس حذف فلاتر» را انتخاب کرد؛ حذف فلاتر مستقل از ساخت و انتشار فایل نصب قابل تحویل است.
+# Deferred work
+
+The legacy Flutter implementation has been removed after the native Android APK was published and verified, preserving the user-approved delivery order.
+
+Remaining verification: run a physical incoming-call check against the current signed build and confirm the call event reaches the configured ntfy topic without a foreground-service failure.

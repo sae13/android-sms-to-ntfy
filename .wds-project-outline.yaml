@@ -3,7 +3,6 @@ project_type: greenfield
 complexity: standard
 tech_stack:
   - android_native_kotlin
-  - flutter
   - kotlin_multiplatform
 component_library: custom
 brief_level: complete
