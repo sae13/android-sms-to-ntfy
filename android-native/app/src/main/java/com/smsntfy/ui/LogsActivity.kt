@@ -6,9 +6,9 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.viewModel
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.smsntfy.R
@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.collect
 
 class LogsActivity : AppCompatActivity() {
 
-    private val viewModel: LogsViewModel by viewModel()
+    private val viewModel: LogsViewModel by viewModels()
     private val adapter = EventLogAdapter()
 
     override fun onCreate(savedInstanceState: Bundle?) {

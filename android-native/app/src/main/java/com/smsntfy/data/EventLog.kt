@@ -2,12 +2,14 @@ package com.smsntfy.data
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import androidx.room.TypeConverters
 import java.util.Date
 
 /**
  * Represents an event log entry (SMS received, call received, SSE message, SMS sent, errors).
  */
 @Entity(tableName = "event_logs")
+@TypeConverters(Converters::class)
 data class EventLog(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,

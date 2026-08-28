@@ -1,7 +1,9 @@
 package com.smsntfy.ui
 
 import android.util.Log
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import android.widget.Toast
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.smsntfy.SmsNtfyApplication
 import com.smsntfy.data.EventLog
@@ -11,12 +13,13 @@ import com.smsntfy.service.SmsForwardingService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class MainViewModel : ViewModel() {
+class MainViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val app by lazy { SmsNtfyApplication() }
+    private val app = application as SmsNtfyApplication
     private val prefs = app.preferences
     private val ntfyClient = app.ntfyClient
     private val sseClient = app.sseClient
@@ -43,7 +46,7 @@ class MainViewModel : ViewModel() {
 
             val running = prefs.isServiceRunning
             val connState = sseClient.connectionState.value
-            val lastEvent = database.eventLogDao().getRecentLogs(1).firstOrNull()
+            val lastEvent = database.eventLogDao().getRecentLogs(1).first().firstOrNull()
 
             _uiState.value = _uiState.value.copy(
                 isServiceRunning = running,
@@ -90,9 +93,9 @@ class MainViewModel : ViewModel() {
     fun testConnection() {
         viewModelScope.launch {
             val success = ntfyClient.sendTestMessage()
-            app.runOnUiThread {
+            withContext(Dispatchers.Main) {
                 val msg = if (success) "Test message sent successfully!" else "Failed to send test message"
-                android.widget.Toast.makeText(app, msg, android.widget.Toast.LENGTH_SHORT).show()
+                Toast.makeText(app, msg, Toast.LENGTH_SHORT).show()
             }
             refreshStatus()
         }

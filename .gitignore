@@ -1,15 +1,27 @@
-# Gradle
+# Gradle and Android build outputs
 .gradle/
+**/.gradle/
 build/
-*/build/
+**/build/
 local.properties
+**/local.properties
+captures/
+.externalNativeBuild/
+.cxx/
 
-# Android
+# Android artifacts
 *.apk
 *.aab
-captures/
+*.ap_
+*.dex
+*.class
 
-# Flutter
+# Signing secrets
+*.jks
+*.keystore
+keystore.properties
+
+# Flutter generated files
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
@@ -17,9 +29,21 @@ captures/
 .pub-cache/
 .flutter/
 
-# JS
+# JavaScript
 node_modules/
+web/dist/
 web-dashboard/dist/
 
-# OS
+# Generated archives
+*.zip
+
+# IDE and OS
+.idea/
+*.iml
+.vscode/
 .DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp

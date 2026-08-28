@@ -6,10 +6,12 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import android.view.View
+import android.widget.Button
+import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.viewModel
 import com.smsntfy.R
 import com.smsntfy.data.EventLog
 import com.smsntfy.network.SseClient
@@ -22,7 +24,7 @@ import kotlinx.coroutines.flow.collect
 
 class MainActivity : AppCompatActivity() {
 
-    private val viewModel: MainViewModel by viewModel()
+    private val viewModel: MainViewModel by viewModels()
     private var callReceiver: CallReceiver? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -77,10 +79,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateUI(state: MainViewModel.UiState) {
-        val btnToggle = findViewById<View>(R.id.btnToggleService)
-        val tvStatus = findViewById<View>(R.id.tvStatus)
-        val tvLastEvent = findViewById<View>(R.id.tvLastEvent)
-        val tvConnectionStatus = findViewById<View>(R.id.tvConnectionStatus)
+        val btnToggle = findViewById<Button>(R.id.btnToggleService)
+        val tvStatus = findViewById<TextView>(R.id.tvStatus)
+        val tvLastEvent = findViewById<TextView>(R.id.tvLastEvent)
+        val tvConnectionStatus = findViewById<TextView>(R.id.tvConnectionStatus)
 
         btnToggle.isEnabled = !state.isLoading
         btnToggle.setText(if (state.isServiceRunning) "Stop Service" else "Start Service")
@@ -92,7 +94,7 @@ class MainActivity : AppCompatActivity() {
             SseClient.ConnectionState.Connected -> "SSE: Connected"
             SseClient.ConnectionState.Connecting -> "SSE: Connecting..."
             SseClient.ConnectionState.Disconnected -> "SSE: Disconnected"
-            is SseClient.ConnectionState.Error -> "SSE: Error - ${it.message}"
+            is SseClient.ConnectionState.Error -> "SSE: Error - ${state.connectionState.message}"
         }
 
         state.lastEvent?.let { event ->

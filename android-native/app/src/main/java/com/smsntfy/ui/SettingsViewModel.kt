@@ -1,22 +1,26 @@
 package com.smsntfy.ui
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import android.widget.Toast
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.smsntfy.SmsNtfyApplication
 import com.smsntfy.network.NtfyClient
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-class SettingsViewModel : ViewModel() {
+class SettingsViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val app by lazy { SmsNtfyApplication() }
+    private val app = application as SmsNtfyApplication
     private val ntfyClient = app.ntfyClient
 
     fun testConnection() {
         viewModelScope.launch {
             val success = ntfyClient.sendTestMessage()
-            app.runOnUiThread {
+            withContext(Dispatchers.Main) {
                 val msg = if (success) "Test message sent successfully!" else "Failed to send test message"
-                android.widget.Toast.makeText(app, msg, android.widget.Toast.LENGTH_SHORT).show()
+                Toast.makeText(app, msg, Toast.LENGTH_SHORT).show()
             }
         }
     }

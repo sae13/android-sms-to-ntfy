@@ -7,7 +7,6 @@ import com.smsntfy.SmsNtfyApplication
 import com.smsntfy.data.Preferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,7 +40,7 @@ class SseClient(context: Context) {
     private var eventSource: EventSource? = null
     private val scope = CoroutineScope(Dispatchers.IO)
 
-    private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
+    private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 
     private val _messages = MutableSharedFlow<SseMessage>(extraBufferCapacity = 64)
@@ -82,7 +81,6 @@ class SseClient(context: Context) {
         eventSource?.cancel()
         eventSource = null
         _connectionState.value = ConnectionState.Disconnected
-        scope.cancel()
     }
 
     private fun connect() {

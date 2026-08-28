@@ -80,9 +80,10 @@ class NtfyClient(context: Context) {
 
                 val response = client.newCall(request).execute()
                 val success = response.isSuccessful
+                val statusCode = response.code
                 response.close()
 
-                Log.d(TAG, "SMS notification sent: $success - ${response.code()}")
+                Log.d(TAG, "SMS notification sent: $success - $statusCode")
                 success
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to send SMS notification", e)
@@ -139,9 +140,10 @@ class NtfyClient(context: Context) {
 
                 val response = client.newCall(request).execute()
                 val success = response.isSuccessful
+                val statusCode = response.code
                 response.close()
 
-                Log.d(TAG, "Call notification sent: $success - ${response.code()}")
+                Log.d(TAG, "Call notification sent: $success - $statusCode")
                 success
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to send call notification", e)
@@ -174,9 +176,10 @@ class NtfyClient(context: Context) {
 
                 val response = client.newCall(request).execute()
                 val success = response.isSuccessful
+                val statusCode = response.code
                 response.close()
 
-                Log.d(TAG, "Test message sent: $success - ${response.code()}")
+                Log.d(TAG, "Test message sent: $success - $statusCode")
                 success
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to send test message", e)
@@ -193,7 +196,7 @@ class NtfyClient(context: Context) {
 
         val requestBuilder = Request.Builder()
             .url(url)
-            .post(json.toRequestBody(MEDIA_TYPE_JSON))
+            .post(json.toRequestBody(MEDIA_TYPE_JSON.toMediaType()))
 
         // Add Basic Auth if credentials provided
         if (prefs.ntfyUsername.isNotEmpty() && prefs.ntfyPassword.isNotEmpty()) {

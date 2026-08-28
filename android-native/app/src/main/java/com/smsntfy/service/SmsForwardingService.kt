@@ -25,6 +25,7 @@ import com.smsntfy.util.WakeLockHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
@@ -133,7 +134,12 @@ class SmsForwardingService : Service() {
     }
 
     private fun processSmsIntent(intent: Intent) {
-        val messages = intent.getParcelableArrayListExtra<SmsMessage>(EXTRA_SMS_MESSAGES)
+        val messages = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableArrayExtra(EXTRA_SMS_MESSAGES, SmsMessage::class.java)?.toList()
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableArrayExtra(EXTRA_SMS_MESSAGES)?.filterIsInstance<SmsMessage>()
+        }
         if (messages == null || messages.isEmpty()) {
             Log.w(TAG, "No SMS messages to process")
             return
@@ -146,7 +152,7 @@ class SmsForwardingService : Service() {
         }
     }
 
-    private fun processSmsMessage(message: SmsMessage) {
+    private suspend fun processSmsMessage(message: SmsMessage) {
         val sender = message.originatingAddress ?: ""
         val body = message.messageBody ?: ""
         val timestamp = message.timestampMillis
