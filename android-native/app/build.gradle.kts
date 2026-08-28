@@ -1,4 +1,17 @@
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+val releaseKeystoreFile = providers.environmentVariable("ANDROID_RELEASE_KEYSTORE")
+    .orElse(providers.gradleProperty("androidReleaseKeystore"))
+val releaseStorePassword = providers.environmentVariable("ANDROID_RELEASE_STORE_PASSWORD")
+    .orElse(providers.gradleProperty("androidReleaseStorePassword"))
+val releaseKeyAlias = providers.environmentVariable("ANDROID_RELEASE_KEY_ALIAS")
+    .orElse(providers.gradleProperty("androidReleaseKeyAlias"))
+val releaseKeyPassword = providers.environmentVariable("ANDROID_RELEASE_KEY_PASSWORD")
+    .orElse(providers.gradleProperty("androidReleaseKeyPassword"))
+val hasReleaseSigning = listOf(
+    releaseKeystoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword
+).all { it.isPresent }
 
 plugins {
     id("com.android.application")
@@ -21,10 +34,24 @@ android {
         vectorDrawables.useSupportLibrary = true
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseKeystoreFile.get())
+                storePassword = releaseStorePassword.get()
+                keyAlias = releaseKeyAlias.get()
+                keyPassword = releaseKeyPassword.get()
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
         debug {
             isDebuggable = true
@@ -47,6 +74,16 @@ android {
     packaging {
         resources {
             excludes.add("META-INF/*.kotlin_module")
+        }
+    }
+}
+
+tasks.matching { it.name == "assembleRelease" || it.name == "bundleRelease" }.configureEach {
+    doFirst {
+        check(hasReleaseSigning) {
+            "Release signing is required. Set ANDROID_RELEASE_KEYSTORE, " +
+                "ANDROID_RELEASE_STORE_PASSWORD, ANDROID_RELEASE_KEY_ALIAS, and " +
+                "ANDROID_RELEASE_KEY_PASSWORD."
         }
     }
 }

@@ -22,6 +22,7 @@ class Preferences(context: Context) {
         const val KEY_ENABLE_CALLS = "enable_calls"
         const val KEY_ENABLE_SSE = "enable_sse"
         const val KEY_SERVICE_RUNNING = "service_running"
+        const val KEY_INITIAL_PERMISSION_REQUESTED = "initial_permission_requested"
         const val KEY_LAST_SENDER = "last_sender"
         const val KEY_LAST_CONTACT = "last_contact"
         const val KEY_USE_BASE64 = "use_base64"
@@ -63,6 +64,10 @@ class Preferences(context: Context) {
     var isServiceRunning: Boolean
         get() = prefs.getBoolean(KEY_SERVICE_RUNNING, false)
         set(value) = prefs.edit().putBoolean(KEY_SERVICE_RUNNING, value).apply()
+
+    var initialPermissionRequested: Boolean
+        get() = prefs.getBoolean(KEY_INITIAL_PERMISSION_REQUESTED, false)
+        set(value) = prefs.edit().putBoolean(KEY_INITIAL_PERMISSION_REQUESTED, value).apply()
 
     var lastSender: String
         get() = prefs.getString(KEY_LAST_SENDER, "") ?: ""

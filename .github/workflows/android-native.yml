@@ -7,6 +7,7 @@ on:
     paths:
       - 'android-native/**'
       - '.github/workflows/android-native.yml'
+      - 'README.md'
   pull_request:
     branches:
       - main
@@ -18,21 +19,26 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: android-native-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Java 17
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
 
@@ -47,11 +53,75 @@ jobs:
         working-directory: android-native
         run: ./gradlew assembleDebug --no-daemon --console=plain
 
-      - name: Upload debug APK
-        if: success()
-        uses: actions/upload-artifact@v7
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: android-native-${{ github.sha }}
+      RELEASE_APK: android-native/app/build/outputs/apk/release/app-release.apk
+      RELEASE_ASSET: sms-ntfy-android-native-release.apk
+      ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+      ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+      ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Java 17
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6
         with:
-          name: android-native-debug-apk
-          path: android-native/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 7
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
+
+      - name: Restore stable release keystore
+        env:
+          ANDROID_RELEASE_KEYSTORE: ${{ runner.temp }}/android-release.jks
+          ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$ANDROID_RELEASE_KEYSTORE_BASE64"
+          test -n "$ANDROID_RELEASE_STORE_PASSWORD"
+          test -n "$ANDROID_RELEASE_KEY_ALIAS"
+          test -n "$ANDROID_RELEASE_KEY_PASSWORD"
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_RELEASE_KEYSTORE"
+          test -s "$ANDROID_RELEASE_KEYSTORE"
+
+      - name: Build signed release APK
+        working-directory: android-native
+        env:
+          ANDROID_RELEASE_KEYSTORE: ${{ runner.temp }}/android-release.jks
+        run: ./gradlew assembleRelease --no-daemon --console=plain
+
+      - name: Verify release APK
+        run: |
+          test -s "$RELEASE_APK"
+          "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner" verify --verbose "$RELEASE_APK"
+          sha256sum "$RELEASE_APK"
+          unzip -t "$RELEASE_APK"
+          cp "$RELEASE_APK" "$RUNNER_TEMP/$RELEASE_ASSET"
+
+      - name: Publish deterministic GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/$RELEASE_ASSET" --clobber
+            gh release edit "$RELEASE_TAG" \
+              --title "Android Native latest" \
+              --notes "Installable Android release from main commit $GITHUB_SHA." \
+              --latest
+          else
+            gh release create "$RELEASE_TAG" "$RUNNER_TEMP/$RELEASE_ASSET" \
+              --target "$GITHUB_SHA" \
+              --title "Android Native latest" \
+              --notes "Installable Android release from main commit $GITHUB_SHA." \
+              --latest
+          fi
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')" = "false"
+          test "$(gh release view "$RELEASE_TAG" --json assets --jq '[.assets[] | select(.name == env.RELEASE_ASSET and .size > 0)] | length')" = "1"

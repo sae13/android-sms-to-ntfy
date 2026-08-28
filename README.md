@@ -2,6 +2,10 @@
 
 A zero-Google SMS/call gateway for Android with a professional web dashboard.
 
+## Download Android app
+
+[Download the latest installable native Android release](https://github.com/sae13/android-sms-to-ntfy/releases/latest/download/sms-ntfy-android-native-release.apk).
+
 ## Modules
 
 - `native-kotlin/` — Android Studio native Kotlin implementation.

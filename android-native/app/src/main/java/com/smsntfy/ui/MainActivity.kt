@@ -4,28 +4,47 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.util.Log
 import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.smsntfy.R
-import com.smsntfy.data.EventLog
 import com.smsntfy.network.SseClient
-import com.smsntfy.receiver.CallReceiver
 import com.smsntfy.service.SmsForwardingService
-import com.smsntfy.util.WakeLockHelper
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
     private val viewModel: MainViewModel by viewModels()
-    private var callReceiver: CallReceiver? = null
+    private var pendingPermissionAction: (() -> Unit)? = null
+    private var initialPermissionRequestInFlight = false
+    private val requestPermissions = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        val prefs = (application as com.smsntfy.SmsNtfyApplication).preferences
+        if (initialPermissionRequestInFlight || !prefs.initialPermissionRequested) {
+            (application as com.smsntfy.SmsNtfyApplication)
+                .preferences.initialPermissionRequested = true
+            initialPermissionRequestInFlight = false
+        }
+        val action = pendingPermissionAction
+        pendingPermissionAction = null
+        if (hasAllRequiredPermissions()) {
+            action?.invoke()
+        } else {
+            Toast.makeText(
+                this,
+                "Required permissions were denied. The service was not started.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,7 +52,7 @@ class MainActivity : AppCompatActivity() {
 
         setupUI()
         observeViewModel()
-        startServiceIfNeeded()
+        handleInitialPermissionsAndSavedService()
     }
 
     override fun onResume() {
@@ -44,7 +63,11 @@ class MainActivity : AppCompatActivity() {
     private fun setupUI() {
         // Toggle service button
         findViewById<View>(R.id.btnToggleService).setOnClickListener {
-            viewModel.toggleService()
+            if (viewModel.uiState.value.isServiceRunning) {
+                viewModel.toggleService()
+            } else {
+                ensurePermissionsAndStartService()
+            }
         }
 
         // Open settings
@@ -119,6 +142,52 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
+    private fun handleInitialPermissionsAndSavedService() {
+        val prefs = (application as com.smsntfy.SmsNtfyApplication).preferences
+        val hasMissingPermissions = !hasAllRequiredPermissions()
+        if (PermissionPolicy.shouldRequestOnLaunch(
+                prefs.initialPermissionRequested,
+                hasMissingPermissions
+            )
+        ) {
+            initialPermissionRequestInFlight = true
+            val launched = requestMissingPermissions { startServiceIfNeeded() }
+            if (!launched) {
+                initialPermissionRequestInFlight = false
+                prefs.initialPermissionRequested = true
+            }
+        } else if (!hasMissingPermissions) {
+            prefs.initialPermissionRequested = true
+            startServiceIfNeeded()
+        }
+    }
+
+    private fun ensurePermissionsAndStartService() {
+        requestMissingPermissions { viewModel.toggleService() }
+    }
+
+    private fun requestMissingPermissions(onGranted: () -> Unit): Boolean {
+        val missingPermissions = PermissionPolicy.missingPermissions(Build.VERSION.SDK_INT) {
+            ContextCompat.checkSelfPermission(this, it) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+
+        if (missingPermissions.isEmpty()) {
+            onGranted()
+            return false
+        } else {
+            pendingPermissionAction = onGranted
+            requestPermissions.launch(missingPermissions.toTypedArray())
+            return true
+        }
+    }
+
+    private fun hasAllRequiredPermissions(): Boolean =
+        PermissionPolicy.hasAllRequiredPermissions(Build.VERSION.SDK_INT) {
+            ContextCompat.checkSelfPermission(this, it) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
 
     private fun openBatteryOptimizationSettings() {
         val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
