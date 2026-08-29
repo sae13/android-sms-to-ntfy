@@ -12,6 +12,11 @@ val hasReleaseSigning = listOf(
     releaseKeyAlias,
     releaseKeyPassword
 ).all { it.isPresent }
+val releaseVersionCode = providers.environmentVariable("ANDROID_VERSION_CODE")
+    .map(String::toInt)
+    .orElse(1)
+val releaseVersionName = providers.environmentVariable("ANDROID_VERSION_NAME")
+    .orElse("1.0.0")
 
 plugins {
     id("com.android.application")
@@ -28,8 +33,8 @@ android {
         applicationId = "com.smsntfy"
         minSdk = 21
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = releaseVersionCode.get()
+        versionName = releaseVersionName.get()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
@@ -68,6 +73,7 @@ android {
     }
 
     buildFeatures {
+        buildConfig = true
         viewBinding = true
     }
 

@@ -47,12 +47,6 @@ class SmsReceiver : BroadcastReceiver() {
             val bodies = Array(messages.size) { index -> messages[index].messageBody.orEmpty() }
             val timestamps = LongArray(messages.size) { index -> messages[index].timestampMillis }
 
-            if (senders.any { it.isEmpty() } || bodies.any { it.isEmpty() }) {
-                Log.w(TAG, "SMS contains an empty sender or body")
-                WakeLockHelper.releaseWakeLock()
-                return
-            }
-
             // Start the service to handle SMS processing
             val serviceIntent = Intent(context, SmsForwardingService::class.java).apply {
                 action = SmsForwardingService.ACTION_PROCESS_SMS

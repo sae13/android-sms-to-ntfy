@@ -7,7 +7,6 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
@@ -68,6 +67,7 @@ class SmsForwardingService : Service() {
     private var database: com.smsntfy.data.AppDatabase? = null
     private var prefs: com.smsntfy.data.Preferences? = null
     private var callReceiver: CallReceiver? = null
+    private val oneShotStarts = OneShotStartTracker()
 
     override fun onCreate() {
         super.onCreate()
@@ -83,27 +83,68 @@ class SmsForwardingService : Service() {
         )
         if (action == null) {
             Log.w(TAG, "Ignoring service restart without an active persistent service")
+            stopSelf(startId)
             return START_NOT_STICKY
         }
         Log.d(TAG, "onStartCommand: action=$action")
 
         if (!ServiceStartPolicy.isKnown(action)) {
             Log.w(TAG, "Unknown service action: $action")
+            if (
+                ServiceStartPolicy.shouldStopRejectedStart(
+                    app.preferences.isServiceRunning,
+                    oneShotStarts.hasActiveStarts()
+                )
+            ) {
+                stopSelf(startId)
+            }
             return START_NOT_STICKY
         }
 
         if (ServiceStartPolicy.requiresImmediateForeground(action)) {
-            ensureForegroundStarted()
+            try {
+                ensureForegroundStarted()
+            } catch (error: Exception) {
+                Log.e(TAG, "Failed to promote forwarding service", error)
+                stopSelf(startId)
+                return START_NOT_STICKY
+            } catch (error: LinkageError) {
+                Log.e(TAG, "Failed to promote forwarding service", error)
+                stopSelf(startId)
+                return START_NOT_STICKY
+            }
         }
 
-        ensureDependenciesInitialized(app)
+        if (action in setOf(ACTION_PROCESS_SMS, ACTION_PROCESS_CALL, ACTION_SEND_REPLY)) {
+            oneShotStarts.register(startId)
+        }
+
+        ServiceStartPolicy.persistedRunningStateBeforeDependencies(action)?.let { isRunning ->
+            app.preferences.isServiceRunning = isRunning
+        }
+
+        if (ServiceStartPolicy.requiresDependencies(action)) {
+            try {
+                ensureDependenciesInitialized(app)
+            } catch (error: Exception) {
+                Log.e(TAG, "Failed to initialize forwarding service", error)
+                oneShotStarts.abandon(startId)
+                stopSelf(startId)
+                return START_NOT_STICKY
+            } catch (error: LinkageError) {
+                Log.e(TAG, "Failed to initialize forwarding service", error)
+                oneShotStarts.abandon(startId)
+                stopSelf(startId)
+                return START_NOT_STICKY
+            }
+        }
 
         when (action) {
             ACTION_START_SERVICE -> startServiceInternal()
-            ACTION_PROCESS_SMS -> processSmsIntent(intent!!)
-            ACTION_PROCESS_CALL -> processCallIntent(intent!!)
+            ACTION_PROCESS_SMS -> processSmsIntent(intent!!, startId)
+            ACTION_PROCESS_CALL -> processCallIntent(intent!!, startId)
             ACTION_STOP_SERVICE -> stopServiceInternal()
-            ACTION_SEND_REPLY -> sendSmsReplyIntent(intent!!)
+            ACTION_SEND_REPLY -> sendSmsReplyIntent(intent!!, startId)
         }
 
         return if (action == ACTION_START_SERVICE) START_STICKY else START_NOT_STICKY
@@ -141,7 +182,7 @@ class SmsForwardingService : Service() {
             startForeground(
                 NOTIFICATION_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                ServiceStartPolicy.foregroundServiceTypes(Build.VERSION.SDK_INT)
             )
         } else {
             startForeground(NOTIFICATION_ID, notification)
@@ -158,7 +199,7 @@ class SmsForwardingService : Service() {
         stopSelf()
     }
 
-    private fun processSmsIntent(intent: Intent) {
+    private fun processSmsIntent(intent: Intent, startId: Int) {
         val messages = SmsPayload.fromParts(
             senders = intent.getStringArrayExtra(EXTRA_SMS_SENDERS),
             bodies = intent.getStringArrayExtra(EXTRA_SMS_BODIES),
@@ -167,20 +208,25 @@ class SmsForwardingService : Service() {
         if (messages.isEmpty()) {
             Log.w(TAG, "No SMS messages to process")
             WakeLockHelper.releaseWakeLock()
+            stopOneShotIfNotPersistent(startId)
             return
         }
 
         ioScope.launch {
-            for (message in messages) {
-                try {
-                    processSmsMessage(message)
-                } catch (error: Exception) {
-                    Log.e(TAG, "Failed while processing SMS from ${message.sender}", error)
-                } catch (error: LinkageError) {
-                    Log.e(TAG, "Failed while processing SMS from ${message.sender}", error)
+            try {
+                for (message in messages) {
+                    try {
+                        processSmsMessage(message)
+                    } catch (error: Exception) {
+                        Log.e(TAG, "Failed while processing SMS from ${message.sender}", error)
+                    } catch (error: LinkageError) {
+                        Log.e(TAG, "Failed while processing SMS from ${message.sender}", error)
+                    }
                 }
+            } finally {
+                WakeLockHelper.releaseWakeLock()
+                stopOneShotIfNotPersistent(startId)
             }
-            WakeLockHelper.releaseWakeLock()
         }
     }
 
@@ -217,54 +263,82 @@ class SmsForwardingService : Service() {
             }
     }
 
-    private fun processCallIntent(intent: Intent) {
+    private fun processCallIntent(intent: Intent, startId: Int) {
         val number = intent.getStringExtra(EXTRA_CALL_NUMBER) ?: ""
         val state = intent.getStringExtra(EXTRA_CALL_STATE) ?: ""
 
-        if (number.isEmpty()) return
+        if (number.isEmpty()) {
+            stopOneShotIfNotPersistent(startId)
+            return
+        }
 
         ioScope.launch {
-            val contact = ContactHelper.getContactName(this@SmsForwardingService, number)
+            try {
+                val contact = ContactHelper.getContactName(this@SmsForwardingService, number)
 
-            // Log event
-            val stateText = when (state) {
-                "ringing" -> "Incoming call"
-                "answered" -> "Call answered"
-                "missed" -> "Missed call"
-                else -> "Call event"
-            }
-            logEvent("call", "$stateText from $contact", stateText, number, contact)
-
-            // Forward to ntfy
-            ntfyClient?.sendCallNotification(number, contact, state)
-                ?.also { success ->
-                    if (success) {
-                        logEvent("call", "Call notification sent", stateText, number, contact)
-                    } else {
-                        logEvent("error", "Failed to send call notification", stateText, number, contact, false)
-                    }
+                // Log event
+                val stateText = when (state) {
+                    "ringing" -> "Incoming call"
+                    "answered" -> "Call answered"
+                    "missed" -> "Missed call"
+                    else -> "Call event"
                 }
+                logEvent("call", "$stateText from $contact", stateText, number, contact)
+
+                // Forward to ntfy
+                ntfyClient?.sendCallNotification(number, contact, state)
+                    ?.also { success ->
+                        if (success) {
+                            logEvent("call", "Call notification sent", stateText, number, contact)
+                        } else {
+                            logEvent("error", "Failed to send call notification", stateText, number, contact, false)
+                        }
+                    }
+            } finally {
+                stopOneShotIfNotPersistent(startId)
+            }
         }
     }
 
-    private fun sendSmsReplyIntent(intent: Intent) {
+    private fun stopOneShotIfNotPersistent(startId: Int) {
+        val isPersistent = (application as SmsNtfyApplication).preferences.isServiceRunning
+        val startIdToStop = oneShotStarts.complete(startId, isPersistent) ?: return
+        if (stopSelfResult(startIdToStop)) {
+            stopForeground(true)
+        }
+    }
+
+    private fun sendSmsReplyIntent(intent: Intent, startId: Int) {
         val number = intent.getStringExtra(EXTRA_REPLY_NUMBER) ?: prefs?.lastSender ?: ""
         val message = intent.getStringExtra(EXTRA_REPLY_MESSAGE) ?: ""
 
         if (number.isEmpty() || message.isEmpty()) {
             Log.w(TAG, "Cannot send reply: empty number or message")
+            stopAfterReplyIfNotPersistent(startId)
             return
         }
 
         ioScope.launch {
-            val success = SmsReplyHelper.sendSmsReply(this@SmsForwardingService, number, message)
+            try {
+                val success = SmsReplyHelper.sendSmsReply(this@SmsForwardingService, number, message)
 
-            if (success) {
-                val contact = ContactHelper.getContactName(this@SmsForwardingService, number)
-                logEvent("sent", "Reply sent to $contact", message, number, contact)
-            } else {
-                logEvent("error", "Failed to send reply", message, number, "", false)
+                if (success) {
+                    val contact = ContactHelper.getContactName(this@SmsForwardingService, number)
+                    logEvent("sent", "Reply sent to $contact", message, number, contact)
+                } else {
+                    logEvent("error", "Failed to send reply", message, number, "", false)
+                }
+            } finally {
+                stopAfterReplyIfNotPersistent(startId)
             }
+        }
+    }
+
+    private fun stopAfterReplyIfNotPersistent(startId: Int) {
+        val isPersistent = (application as SmsNtfyApplication).preferences.isServiceRunning
+        val startIdToStop = oneShotStarts.complete(startId, isPersistent) ?: return
+        if (stopSelfResult(startIdToStop)) {
+            stopForeground(true)
         }
     }
 
@@ -382,15 +456,19 @@ class SmsForwardingService : Service() {
         success: Boolean = true
     ) {
         ioScope.launch {
-            val event = EventLog(
-                type = type,
-                title = title,
-                message = message,
-                sender = sender,
-                contact = contact,
-                success = success
-            )
-            database?.eventLogDao()?.insert(event)
+            try {
+                val event = EventLog(
+                    type = type,
+                    title = title,
+                    message = message,
+                    sender = sender,
+                    contact = contact,
+                    success = success
+                )
+                database?.eventLogDao()?.insert(event)
+            } catch (error: Exception) {
+                Log.e(TAG, "Failed to persist event log", error)
+            }
         }
     }
 

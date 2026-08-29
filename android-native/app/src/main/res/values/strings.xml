@@ -53,4 +53,12 @@
     <string name="service_stopped">Service Stopped</string>
     <string name="last_event">Last Event</string>
     <string name="no_events_yet">No events yet</string>
+    <string name="update_channel_name">App updates</string>
+    <string name="update_channel_description">New GitHub release notifications</string>
+    <string name="update_available_title">SMS to ntfy update available</string>
+    <string name="update_available_message">Version %1$s is available; download URL copied</string>
+    <string name="update_available_details">Version %1$s is available. The APK URL was copied. Tap to open it or use the action below to copy it again.</string>
+    <string name="copy_download_url">Copy download URL</string>
+    <string name="update_download_url_label">SMS to ntfy APK download URL</string>
+    <string name="update_url_copied">Download URL copied</string>
 </resources>

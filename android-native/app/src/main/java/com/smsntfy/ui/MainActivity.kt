@@ -16,6 +16,7 @@ import androidx.lifecycle.lifecycleScope
 import com.smsntfy.R
 import com.smsntfy.network.SseClient
 import com.smsntfy.service.SmsForwardingService
+import com.smsntfy.update.ReleaseUpdateChecker
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
@@ -49,6 +50,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        lifecycleScope.launch { ReleaseUpdateChecker(applicationContext).checkAndNotify() }
 
         setupUI()
         observeViewModel()

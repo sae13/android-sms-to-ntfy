@@ -2,10 +2,11 @@ package com.smsntfy.service
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class SmsPayloadTest {
+class ServicePayloadPolicyTest {
 
     @Test
     fun singlePartCreatesOneCompleteSms() {
@@ -96,7 +97,42 @@ class SmsPayloadTest {
     }
 
     @Test
-    fun serviceBoundaryUsesOnlySimpleArrayTypes() {
+    fun sameSenderPartsOutsideMultipartWindowStaySeparate() {
+        val payloads = SmsPayload.fromParts(
+            senders = arrayOf("111", "111"),
+            bodies = arrayOf("first", "second"),
+            timestamps = longArrayOf(10L, 20_000L)
+        )
+
+        assertEquals(
+            listOf(
+                SmsPayload("111", "first", 10L),
+                SmsPayload("111", "second", 20_000L)
+            ),
+            payloads
+        )
+    }
+
+    @Test
+    fun nonAdjacentPartsFromSameSenderStaySeparate() {
+        val payloads = SmsPayload.fromParts(
+            senders = arrayOf("111", "222", "111"),
+            bodies = arrayOf("first", "other", "second"),
+            timestamps = longArrayOf(10L, 11L, 12L)
+        )
+
+        assertEquals(
+            listOf(
+                SmsPayload("111", "first", 10L),
+                SmsPayload("222", "other", 11L),
+                SmsPayload("111", "second", 12L)
+            ),
+            payloads
+        )
+    }
+
+    @Test
+    fun payloadUsesOnlySimpleValueTypes() {
         val declaredTypes = SmsPayload::class.java.declaredFields.map { it.type }.toSet()
 
         assertTrue(declaredTypes.contains(String::class.java))
@@ -124,6 +160,40 @@ class SmsPayloadTest {
     }
 
     @Test
+    fun foregroundTypesStayCompatibleAcrossAndroidVersions() {
+        assertEquals(
+            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+            ServiceStartPolicy.foregroundServiceTypes(sdkInt = 33)
+        )
+        assertEquals(
+            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+            ServiceStartPolicy.foregroundServiceTypes(sdkInt = 34)
+        )
+    }
+
+    @Test
+    fun stopActionSkipsDependencyInitialization() {
+        assertFalse(ServiceStartPolicy.requiresDependencies(SmsForwardingService.ACTION_STOP_SERVICE))
+        assertTrue(ServiceStartPolicy.requiresDependencies(SmsForwardingService.ACTION_START_SERVICE))
+        assertTrue(ServiceStartPolicy.requiresDependencies(SmsForwardingService.ACTION_PROCESS_SMS))
+    }
+
+    @Test
+    fun coldStopClearsPersistedRunningStateWithoutDependencies() {
+        assertEquals(
+            false,
+            ServiceStartPolicy.persistedRunningStateBeforeDependencies(
+                SmsForwardingService.ACTION_STOP_SERVICE
+            )
+        )
+        assertNull(
+            ServiceStartPolicy.persistedRunningStateBeforeDependencies(
+                SmsForwardingService.ACTION_START_SERVICE
+            )
+        )
+    }
+
+    @Test
     fun restartWithoutIntentOnlyResumesPersistentService() {
         assertEquals(
             SmsForwardingService.ACTION_START_SERVICE,
@@ -133,9 +203,78 @@ class SmsPayloadTest {
     }
 
     @Test
+    fun eventCompletionDoesNotStopPersistentService() {
+        assertFalse(ServiceStartPolicy.shouldStopAfterEvent(isPersistent = true))
+        assertTrue(ServiceStartPolicy.shouldStopAfterEvent(isPersistent = false))
+    }
+
+    @Test
+    fun oneShotCompletionStopsOnlyItsOwnStartRequest() {
+        assertEquals(42, ServiceStartPolicy.startIdToStopAfterOneShot(false, 42))
+        assertEquals(null, ServiceStartPolicy.startIdToStopAfterOneShot(true, 42))
+    }
+
+    @Test
+    fun concurrentOneShotStartsStopOnlyAfterEveryJobCompletes() {
+        val tracker = OneShotStartTracker()
+        tracker.register(41)
+        tracker.register(42)
+
+        assertEquals(null, tracker.complete(42, isPersistent = false))
+        assertEquals(42, tracker.complete(41, isPersistent = false))
+    }
+
+    @Test
+    fun failedOneShotStartDoesNotKeepLaterWorkAlive() {
+        val tracker = OneShotStartTracker()
+        tracker.register(41)
+        tracker.abandon(41)
+        tracker.register(42)
+
+        assertEquals(42, tracker.complete(42, isPersistent = false))
+        assertFalse(tracker.hasActiveStarts())
+    }
+
+    @Test
+    fun persistentServicePreventsOneShotCompletionFromStoppingIt() {
+        val tracker = OneShotStartTracker()
+        tracker.register(42)
+
+        assertEquals(null, tracker.complete(42, isPersistent = true))
+    }
+
+    @Test
+    fun replyCompletionUsesSameOneShotLifecyclePolicy() {
+        assertTrue(ServiceStartPolicy.shouldStopAfterReply(isPersistent = false))
+        assertFalse(ServiceStartPolicy.shouldStopAfterReply(isPersistent = true))
+    }
+
+    @Test
     fun unknownActionsAreRejectedWithoutProcessing() {
         assertFalse(ServiceStartPolicy.isKnown("UNKNOWN"))
         assertTrue(ServiceStartPolicy.isKnown(SmsForwardingService.ACTION_PROCESS_SMS))
         assertTrue(ServiceStartPolicy.isKnown(SmsForwardingService.ACTION_PROCESS_CALL))
+    }
+
+    @Test
+    fun rejectedActionDoesNotStopAnExistingPersistentService() {
+        assertFalse(
+            ServiceStartPolicy.shouldStopRejectedStart(
+                isPersistent = true,
+                hasActiveOneShots = false
+            )
+        )
+        assertFalse(
+            ServiceStartPolicy.shouldStopRejectedStart(
+                isPersistent = false,
+                hasActiveOneShots = true
+            )
+        )
+        assertTrue(
+            ServiceStartPolicy.shouldStopRejectedStart(
+                isPersistent = false,
+                hasActiveOneShots = false
+            )
+        )
     }
 }

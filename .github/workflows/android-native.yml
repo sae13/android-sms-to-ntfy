@@ -67,6 +67,8 @@ jobs:
       ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
       ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
       ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+      ANDROID_VERSION_CODE: ${{ github.run_number }}
+      ANDROID_VERSION_NAME: 1.0.${{ github.run_number }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -115,13 +117,13 @@ jobs:
             gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/$RELEASE_ASSET" --clobber
             gh release edit "$RELEASE_TAG" \
               --title "Android Native latest" \
-              --notes "Installable Android release from main commit $GITHUB_SHA." \
+              --notes "Installable Android release from main commit $GITHUB_SHA. versionCode: $GITHUB_RUN_NUMBER" \
               --latest
           else
             gh release create "$RELEASE_TAG" "$RUNNER_TEMP/$RELEASE_ASSET" \
               --target "$GITHUB_SHA" \
               --title "Android Native latest" \
-              --notes "Installable Android release from main commit $GITHUB_SHA." \
+              --notes "Installable Android release from main commit $GITHUB_SHA. versionCode: $GITHUB_RUN_NUMBER" \
               --latest
           fi
           test "$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')" = "false"
