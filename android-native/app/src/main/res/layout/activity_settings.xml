@@ -214,6 +214,80 @@
             android:layout_marginBottom="16dp"
             android:text="@string/test_deltachat" />
 
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="8dp"
+            android:text="@string/telegram_destination"
+            android:textColor="@color/white"
+            android:textSize="18sp" />
+
+        <CheckBox
+            android:id="@+id/cbEnableTelegram"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:text="@string/enable_telegram"
+            android:textColor="@color/white" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:hint="@string/telegram_bot_token">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etTelegramBotToken"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="textPassword"
+                android:textColor="@color/white" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:hint="@string/telegram_chat_id">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etTelegramChatId"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="number|numberSigned"
+                android:textColor="@color/white" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:hint="@string/telegram_proxy">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etTelegramProxy"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="textUri"
+                android:textColor="@color/white" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:text="@string/telegram_proxy_help"
+            android:textColor="@color/slate_400"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/btnTestTelegram"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:text="@string/test_telegram" />
+
         <!-- Buttons -->
         <Button
             android:id="@+id/btnTestConnection"

@@ -63,4 +63,17 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             onComplete(result)
         }
     }
+
+    fun testTelegram(onComplete: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val success = try {
+                app.telegramBotClient.testConnection()
+            } catch (_: Exception) {
+                false
+            } catch (_: LinkageError) {
+                false
+            }
+            onComplete(success)
+        }
+    }
 }

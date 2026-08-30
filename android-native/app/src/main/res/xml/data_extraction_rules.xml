@@ -2,8 +2,12 @@
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="file" path="deltachat-accounts/" />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="database" path="sms_ntfy_db" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="file" path="deltachat-accounts/" />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="database" path="sms_ntfy_db" />
     </device-transfer>
 </data-extraction-rules>

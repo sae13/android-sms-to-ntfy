@@ -1,8 +1,11 @@
 package com.smsntfy.ui
 
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.View
+import androidx.core.content.ContextCompat
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.activity.viewModels
@@ -58,6 +61,15 @@ class SettingsActivity : AppCompatActivity() {
                 Toast.makeText(this, message, Toast.LENGTH_LONG).show()
             }
         }
+        binding.btnTestTelegram.setOnClickListener {
+            viewModel.testTelegram { success ->
+                Toast.makeText(
+                    this,
+                    getString(if (success) R.string.telegram_test_sent else R.string.telegram_test_failed),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
     }
 
     private fun loadSettings() {
@@ -74,6 +86,10 @@ class SettingsActivity : AppCompatActivity() {
         binding.cbEnableSse.isChecked = prefs.enableSse
         binding.cbUseBase64.isChecked = prefs.useBase64
         binding.cbEnableDeltaChat.isChecked = prefs.deltaChatEnabled
+        binding.cbEnableTelegram.isChecked = prefs.telegramEnabled
+        binding.etTelegramBotToken.setText(prefs.telegramBotToken)
+        binding.etTelegramChatId.setText(prefs.telegramChatId)
+        binding.etTelegramProxy.setText(prefs.telegramProxy)
 
         binding.spinnerPriority.setSelection(prefs.ntfyPriority)
     }
@@ -93,6 +109,24 @@ class SettingsActivity : AppCompatActivity() {
         prefs.useBase64 = binding.cbUseBase64.isChecked
         prefs.ntfyPriority = binding.spinnerPriority.selectedItemPosition
         prefs.deltaChatEnabled = binding.cbEnableDeltaChat.isChecked && prefs.deltaChatChatId > 0
+        prefs.telegramBotToken = binding.etTelegramBotToken.text?.toString()?.trim().orEmpty()
+        prefs.telegramChatId = binding.etTelegramChatId.text?.toString()?.trim().orEmpty()
+        prefs.telegramProxy = binding.etTelegramProxy.text?.toString()?.trim().orEmpty()
+        prefs.telegramEnabled = binding.cbEnableTelegram.isChecked &&
+            com.smsntfy.telegram.TelegramBotClient.isValidBotToken(prefs.telegramBotToken) &&
+            com.smsntfy.telegram.TelegramBotClient.isValidChatId(prefs.telegramChatId) &&
+            com.smsntfy.telegram.TelegramProxy.parse(prefs.telegramProxy).isSuccess
+
+        if (prefs.isServiceRunning) {
+            val serviceIntent = Intent(this, com.smsntfy.service.SmsForwardingService::class.java).apply {
+                action = com.smsntfy.service.SmsForwardingService.ACTION_START_SERVICE
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ContextCompat.startForegroundService(this, serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+        }
 
         Toast.makeText(this, "Settings saved", Toast.LENGTH_SHORT).show()
         finish()

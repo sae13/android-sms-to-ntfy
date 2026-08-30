@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat
 import com.smsntfy.R
 import com.smsntfy.SmsNtfyApplication
 import com.smsntfy.data.EventLog
+import com.smsntfy.data.TelegramReplyMapping
 import com.smsntfy.deltachat.DeltaChatDestinationPolicy
 import com.smsntfy.deltachat.DeltaChatMessageFormatter
 import com.smsntfy.network.NtfyClient
@@ -27,6 +28,12 @@ import com.smsntfy.network.SseClient
 import com.smsntfy.receiver.CallReceiver
 import com.smsntfy.sms.ContactHelper
 import com.smsntfy.sms.SmsReplyHelper
+import com.smsntfy.telegram.TelegramBotClient
+import com.smsntfy.telegram.TelegramReplyDecision
+import com.smsntfy.telegram.TelegramReplyPolicy
+import com.smsntfy.telegram.TelegramSendResult
+import com.smsntfy.telegram.TelegramUpdate
+import com.smsntfy.telegram.TelegramUpdatesResult
 import com.smsntfy.util.WakeLockHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,6 +42,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -72,7 +80,9 @@ class SmsForwardingService : Service() {
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var ntfyClient: NtfyClient? = null
     private var sseClient: SseClient? = null
+    private var telegramClient: TelegramBotClient? = null
     private var sseJob: Job? = null
+    private var telegramPollingJob: Job? = null
     private var database: com.smsntfy.data.AppDatabase? = null
     private var prefs: com.smsntfy.data.Preferences? = null
     private var callReceiver: CallReceiver? = null
@@ -161,10 +171,11 @@ class SmsForwardingService : Service() {
     }
 
     private fun ensureDependenciesInitialized(app: SmsNtfyApplication) {
-        if (prefs != null && ntfyClient != null && sseClient != null && database != null) return
+        if (prefs != null && ntfyClient != null && sseClient != null && telegramClient != null && database != null) return
 
         ntfyClient = app.ntfyClient
         sseClient = app.sseClient
+        telegramClient = app.telegramBotClient
         database = app.database
         prefs = app.preferences
         callReceiver = CallReceiver()
@@ -183,6 +194,17 @@ class SmsForwardingService : Service() {
                         success = false
                     )
                 }
+                val telegramCount = app.database.telegramUpdateDao()
+                    .finalizeStaleClaims(startupCutoff, System.currentTimeMillis())
+                if (telegramCount > 0) {
+                    Log.e(TAG, "$telegramCount stale Telegram update claim(s) finalized as failed; at-most-once policy prevents retry")
+                    logEvent(
+                        "error",
+                        "Interrupted Telegram replies finalized as failed",
+                        "$telegramCount claimed update(s) were interrupted before completion and will not be retried",
+                        success = false
+                    )
+                }
             }
         }
     }
@@ -191,9 +213,17 @@ class SmsForwardingService : Service() {
         Log.d(TAG, "Starting foreground service")
         prefs?.isServiceRunning = true
 
-        // Start SSE connection if enabled
+        // Refresh long-lived connections when settings change while the
+        // foreground service is already running.
         if (prefs?.enableSse == true) {
-            startSseConnection()
+            if (sseJob?.isActive != true) startSseConnection()
+        } else {
+            stopSseConnection()
+        }
+        if (prefs?.telegramEnabled == true) {
+            if (telegramPollingJob?.isActive != true) startTelegramPolling()
+        } else {
+            stopTelegramPolling()
         }
 
         // Update notification to show connected
@@ -220,6 +250,7 @@ class SmsForwardingService : Service() {
         prefs?.isServiceRunning = false
 
         stopSseConnection()
+        stopTelegramPolling()
         stopCallListener()
         stopForeground(true)
         stopSelf()
@@ -301,6 +332,39 @@ class SmsForwardingService : Service() {
                 logEvent("sms", "SMS forwarded to Delta Chat", "Message queued", sender, contact)
             } else {
                 logEvent("error", "Failed to forward SMS to Delta Chat", "Delta Chat rejected the message", success = false)
+            }
+        }
+
+        // Telegram is an independent, opt-in destination. A failed Telegram
+        // request must not affect ntfy or Delta Chat delivery.
+        if (currentPrefs.telegramEnabled) {
+            try {
+                when (val result = telegramClient?.sendSmsMessage(sender, contact, body, timestamp)) {
+                    is TelegramSendResult.Sent -> {
+                        val inserted = database?.telegramReplyMappingDao()?.insert(
+                            TelegramReplyMapping(
+                                chatId = currentPrefs.telegramChatId.trim(),
+                                telegramMessageId = result.messageId,
+                                phoneNumber = sender
+                            )
+                        ) ?: -1L
+                        if (inserted >= 0) {
+                            logEvent("sms", "SMS forwarded to Telegram", "Message sent", sender, contact)
+                        } else {
+                            logEvent("error", "Telegram reply mapping already exists", "Message sent but mapping was not inserted", sender, contact, false)
+                        }
+                    }
+                    is TelegramSendResult.Failed ->
+                        logEvent("error", "Failed to forward SMS to Telegram", result.reason, sender, contact, false)
+                    null ->
+                        logEvent("error", "Failed to forward SMS to Telegram", "Telegram client unavailable", sender, contact, false)
+                }
+            } catch (error: Exception) {
+                Log.e(TAG, "Telegram SMS forwarding failed", error)
+                logEvent("error", "Failed to forward SMS to Telegram", "Telegram request failed", sender, contact, false)
+            } catch (error: LinkageError) {
+                Log.e(TAG, "Telegram client unavailable", error)
+                logEvent("error", "Failed to forward SMS to Telegram", "Telegram client unavailable", sender, contact, false)
             }
         }
     }
@@ -427,6 +491,78 @@ class SmsForwardingService : Service() {
         sseClient?.stop()
         sseJob?.cancel()
         sseJob = null
+    }
+
+    private fun startTelegramPolling() {
+        if (telegramPollingJob?.isActive == true) return
+        val client = telegramClient ?: return
+        val db = database ?: return
+        telegramPollingJob = ioScope.launch {
+            var retryDelay = 1_000L
+            while (isActive && prefs?.telegramEnabled == true) {
+                when (val result = client.getUpdates(db.telegramStateDao().nextOffset(), timeoutSeconds = 50)) {
+                    is TelegramUpdatesResult.Success -> {
+                        retryDelay = 1_000L
+                        for (update in result.updates.sortedBy { it.updateId }) {
+                            try {
+                                handleTelegramUpdate(update)
+                            } catch (error: Exception) {
+                                Log.e(TAG, "Telegram update handling failed", error)
+                                logEvent("error", "Telegram update handling failed", "Update rejected", success = false)
+                            } catch (error: LinkageError) {
+                                Log.e(TAG, "Telegram update linkage failure", error)
+                                logEvent("error", "Telegram update handling failed", "Update rejected", success = false)
+                            } finally {
+                                // Offset advancement is durable and monotonic.
+                                db.telegramStateDao().advanceTo(update.updateId + 1)
+                            }
+                        }
+                    }
+                    is TelegramUpdatesResult.Failed -> {
+                        Log.e(TAG, "Telegram polling failed: ${result.reason}")
+                        delay(retryDelay)
+                        retryDelay = minOf(retryDelay * 2, 30_000L)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun stopTelegramPolling() {
+        telegramPollingJob?.cancel()
+        telegramPollingJob = null
+    }
+
+    private suspend fun handleTelegramUpdate(update: TelegramUpdate) {
+        val db = database ?: return
+        if (!db.telegramUpdateDao().claim(update.updateId, System.currentTimeMillis())) {
+            Log.d(TAG, "Duplicate Telegram update ignored: ${update.updateId}")
+            return
+        }
+        val expectedChat = prefs?.telegramChatId?.trim().orEmpty()
+        val mappedPhone = if (TelegramReplyPolicy.isReplyCandidate(update, expectedChat)) {
+            update.replyToMessageId
+                ?.let { db.telegramReplyMappingDao().find(expectedChat, it)?.phoneNumber }
+        } else null
+        val decision = TelegramReplyPolicy.decide(update, expectedChat, mappedPhone)
+        if (decision !is TelegramReplyDecision.Send) {
+            db.telegramUpdateDao().complete(update.updateId, "invalid", System.currentTimeMillis())
+            return
+        }
+
+        val success = SmsReplyHelper.sendSmsReply(
+            this@SmsForwardingService,
+            decision.phoneNumber,
+            decision.text
+        )
+        val outcome = if (success) "sent" else "failed"
+        db.telegramUpdateDao().complete(update.updateId, outcome, System.currentTimeMillis())
+        val contact = ContactHelper.getContactName(this@SmsForwardingService, decision.phoneNumber)
+        if (success) {
+            logEvent("sent", "Telegram reply sent to $contact", decision.text, decision.phoneNumber, contact)
+        } else {
+            logEvent("error", "Failed to send Telegram reply", decision.text, decision.phoneNumber, contact, false)
+        }
     }
 
     private fun handleSseMessage(sseMessage: SseClient.SseMessage) {
@@ -597,6 +733,7 @@ class SmsForwardingService : Service() {
     override fun onDestroy() {
         Log.d(TAG, "Service destroyed")
         stopSseConnection()
+        stopTelegramPolling()
         stopCallListener()
         scope.cancel()
         ioScope.cancel()

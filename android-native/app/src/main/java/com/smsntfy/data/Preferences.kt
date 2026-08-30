@@ -31,6 +31,10 @@ class Preferences(context: Context) {
         const val KEY_DELTACHAT_ENABLED = "deltachat_enabled"
         const val KEY_DELTACHAT_ACCOUNT_ID = "deltachat_account_id"
         const val KEY_DELTACHAT_CHAT_ID = "deltachat_chat_id"
+        const val KEY_TELEGRAM_ENABLED = "telegram_enabled"
+        const val KEY_TELEGRAM_BOT_TOKEN = "telegram_bot_token"
+        const val KEY_TELEGRAM_CHAT_ID = "telegram_chat_id"
+        const val KEY_TELEGRAM_PROXY = "telegram_proxy"
 
         // Deliberately no login-code key: credentials belong only in Delta Chat's private database.
     }
@@ -103,6 +107,39 @@ class Preferences(context: Context) {
     var deltaChatChatId: Int
         get() = prefs.getInt(KEY_DELTACHAT_CHAT_ID, 0)
         set(value) = prefs.edit().putInt(KEY_DELTACHAT_CHAT_ID, value).apply()
+
+    /** Telegram is deliberately disabled until the user opts in. */
+    var telegramEnabled: Boolean
+        get() = prefs.getBoolean(KEY_TELEGRAM_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_TELEGRAM_ENABLED, value).apply()
+
+    /**
+     * Telegram bot credentials are kept only in the app's private preferences.
+     * They are never copied into Room mappings or message bodies.
+     */
+    var telegramBotToken: String
+        get() = prefs.getString(KEY_TELEGRAM_BOT_TOKEN, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_TELEGRAM_BOT_TOKEN, value).apply()
+
+    var telegramChatId: String
+        get() = prefs.getString(KEY_TELEGRAM_CHAT_ID, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_TELEGRAM_CHAT_ID, value).apply()
+
+    var telegramProxy: String
+        get() = prefs.getString(KEY_TELEGRAM_PROXY, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_TELEGRAM_PROXY, value).apply()
+
+    var telegramProxyUrl: String
+        get() = telegramProxy
+        set(value) { telegramProxy = value }
+
+    fun saveTelegramSettings(enabled: Boolean, botToken: String, chatId: String, proxy: String): Boolean =
+        prefs.edit()
+            .putBoolean(KEY_TELEGRAM_ENABLED, enabled)
+            .putString(KEY_TELEGRAM_BOT_TOKEN, botToken)
+            .putString(KEY_TELEGRAM_CHAT_ID, chatId)
+            .putString(KEY_TELEGRAM_PROXY, proxy)
+            .commit()
 
     fun saveDeltaChatDestination(accountId: Int, chatId: Int): Boolean =
         prefs.edit()

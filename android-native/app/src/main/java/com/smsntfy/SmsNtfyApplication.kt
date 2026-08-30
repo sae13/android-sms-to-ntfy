@@ -8,6 +8,7 @@ import com.smsntfy.deltachat.DeltaChatClient
 import com.smsntfy.deltachat.NativeDeltaChatCore
 import com.smsntfy.network.NtfyClient
 import com.smsntfy.network.SseClient
+import com.smsntfy.telegram.TelegramBotClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,6 +26,7 @@ class SmsNtfyApplication : Application() {
     val database by lazy { AppDatabase.getDatabase(this) }
     val ntfyClient by lazy { NtfyClient(this) }
     val sseClient by lazy { SseClient(this) }
+    val telegramBotClient by lazy { TelegramBotClient(this) }
     val deltaChatClient by lazy {
         DeltaChatClient(
             core = NativeDeltaChatCore(this),

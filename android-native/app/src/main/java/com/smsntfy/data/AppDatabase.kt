@@ -10,14 +10,20 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 /** Room database for event logging, reply routing, and durable command claims. */
 @Database(
-    entities = [EventLog::class, ReplyMapping::class, ReplySequence::class, NtfyCommand::class],
-    version = 3,
+    entities = [
+        EventLog::class, ReplyMapping::class, ReplySequence::class, NtfyCommand::class,
+        TelegramReplyMapping::class, TelegramUpdate::class, TelegramState::class
+    ],
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun eventLogDao(): EventLogDao
     abstract fun replyMappingDao(): ReplyMappingDao
     abstract fun ntfyCommandDao(): NtfyCommandDao
+    abstract fun telegramReplyMappingDao(): TelegramReplyMappingDao
+    abstract fun telegramUpdateDao(): TelegramUpdateDao
+    abstract fun telegramStateDao(): TelegramStateDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
@@ -27,10 +33,11 @@ abstract class AppDatabase : RoomDatabase() {
                 context.applicationContext,
                 AppDatabase::class.java,
                 "sms_ntfy_db"
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         db.execSQL("INSERT OR IGNORE INTO `reply_sequence` (`singleton`, `nextReplyId`) VALUES (1, 0)")
+                        db.execSQL("INSERT OR IGNORE INTO `telegram_state` (`singleton`, `nextOffset`) VALUES (1, 0)")
                     }
                 })
                 .build().also { INSTANCE = it }
@@ -54,6 +61,31 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("CREATE TABLE IF NOT EXISTS `reply_sequence` (`singleton` INTEGER NOT NULL, `nextReplyId` INTEGER NOT NULL, PRIMARY KEY(`singleton`))")
                 db.execSQL("INSERT OR IGNORE INTO `reply_sequence` (`singleton`, `nextReplyId`) SELECT 1, COALESCE((SELECT (`replyId` + 1) % 1000 FROM `reply_mappings` ORDER BY `id` DESC LIMIT 1), 0)")
                 db.execSQL("CREATE TABLE IF NOT EXISTS `ntfy_commands` (`eventId` TEXT NOT NULL, `claimedAt` INTEGER NOT NULL, `outcome` TEXT NOT NULL, `completedAt` INTEGER, PRIMARY KEY(`eventId`))")
+            }
+        }
+
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `telegram_reply_mappings` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`chatId` TEXT NOT NULL, `telegramMessageId` INTEGER NOT NULL, " +
+                        "`phoneNumber` TEXT NOT NULL, `createdAt` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_telegram_reply_mappings_chatId_telegramMessageId` " +
+                        "ON `telegram_reply_mappings` (`chatId`, `telegramMessageId`)"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `telegram_updates` (" +
+                        "`updateId` INTEGER NOT NULL, `claimedAt` INTEGER NOT NULL, " +
+                        "`outcome` TEXT NOT NULL, `completedAt` INTEGER, PRIMARY KEY(`updateId`))"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `telegram_state` (" +
+                        "`singleton` INTEGER NOT NULL, `nextOffset` INTEGER NOT NULL, PRIMARY KEY(`singleton`))"
+                )
+                db.execSQL("INSERT OR IGNORE INTO `telegram_state` (`singleton`, `nextOffset`) VALUES (1, 0)")
             }
         }
     }

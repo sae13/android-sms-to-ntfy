@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
     <exclude domain="file" path="deltachat-accounts/" />
+    <!-- Shared preferences contain bot tokens, ntfy credentials, and proxy secrets. -->
+    <exclude domain="sharedpref" path="." />
+    <!-- Telegram phone mappings and polling offsets are device-local state. -->
+    <exclude domain="database" path="sms_ntfy_db" />
 </full-backup-content>

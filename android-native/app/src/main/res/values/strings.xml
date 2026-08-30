@@ -46,6 +46,15 @@
     <string name="deltachat_setup_failed">Delta Chat setup failed</string>
     <string name="deltachat_test_sent">Delta Chat test message queued</string>
     <string name="deltachat_test_failed">Delta Chat test message failed</string>
+    <string name="telegram_destination">Telegram destination</string>
+    <string name="enable_telegram">Enable Telegram forwarding and replies</string>
+    <string name="telegram_bot_token">Telegram bot token</string>
+    <string name="telegram_chat_id">Telegram chat or group ID</string>
+    <string name="telegram_proxy">Telegram proxy (optional)</string>
+    <string name="telegram_proxy_help">SOCKS5: socks5://host:port. MTProto links require a local SOCKS bridge, for example &amp;socks=127.0.0.1:1080.</string>
+    <string name="test_telegram">Test Telegram connection</string>
+    <string name="telegram_test_sent">Telegram connection succeeded</string>
+    <string name="telegram_test_failed">Telegram connection failed</string>
     
     <!-- Status -->
     <string name="status_connected">Connected</string>
