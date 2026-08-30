@@ -1,6 +1,12 @@
 <resources>
     <string name="app_name">SMS-to-Ntfy</string>
     <string name="app_name_short">SMS-Ntfy</string>
+
+    <!-- Footer links -->
+    <string name="footer_links_label">Project and contact links</string>
+    <string name="footer_github">Open project on GitHub</string>
+    <string name="footer_telegram">Open Telegram profile</string>
+    <string name="footer_email">Send email</string>
     
     <!-- Service Notification -->
     <string name="notification_channel_id">sms_forwarding_service</string>

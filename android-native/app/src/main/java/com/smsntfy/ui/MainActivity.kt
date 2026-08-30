@@ -1,6 +1,8 @@
 package com.smsntfy.ui
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -90,6 +92,24 @@ class MainActivity : AppCompatActivity() {
         // View logs
         findViewById<View>(R.id.btnViewLogs).setOnClickListener {
             startActivity(Intent(this, LogsActivity::class.java))
+        }
+
+        findViewById<View>(R.id.btnFooterGithub).setOnClickListener {
+            openExternalLink(FooterLinks.github)
+        }
+        findViewById<View>(R.id.btnFooterTelegram).setOnClickListener {
+            openExternalLink(FooterLinks.telegram)
+        }
+        findViewById<View>(R.id.btnFooterEmail).setOnClickListener {
+            openExternalLink(FooterLinks.email)
+        }
+    }
+
+    private fun openExternalLink(uri: String) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri)))
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, "No app can open this link.", Toast.LENGTH_SHORT).show()
         }
     }
 
