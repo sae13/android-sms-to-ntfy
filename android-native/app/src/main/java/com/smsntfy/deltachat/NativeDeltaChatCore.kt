@@ -8,16 +8,25 @@ import com.b44t.messenger.DcEventChannel
 import com.b44t.messenger.FFITransport
 import java.io.File
 
+internal fun <T> createNativeWrapper(loadLibrary: () -> Unit, constructWrapper: () -> T): T {
+    loadLibrary()
+    return constructWrapper()
+}
+
 class NativeDeltaChatCore(context: Context) : DeltaChatCore {
+    // Loading must happen before constructing any JNI-backed wrapper; Kotlin property
+    // initializers run before init blocks.
+    private val eventChannel = createNativeWrapper(
+        loadLibrary = { System.loadLibrary("native-utils") },
+        constructWrapper = { DcEventChannel() }
+    )
     // DcAccounts keeps the native pointer, while this strong Java reference prevents
     // the event channel finalizer from releasing its native pointer prematurely.
-    private val eventChannel = DcEventChannel()
     private val accounts: DcAccounts
     private val rpc: Rpc
     private var accountId: Int = 0
 
     init {
-        System.loadLibrary("native-utils")
         val dataDirectory = File(context.filesDir, "deltachat-accounts").apply { mkdirs() }
         accounts = DcAccounts(dataDirectory.absolutePath, eventChannel)
         rpc = Rpc(FFITransport(accounts.jsonrpcInstance))
