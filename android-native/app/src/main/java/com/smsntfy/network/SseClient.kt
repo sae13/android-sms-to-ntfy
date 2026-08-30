@@ -7,6 +7,8 @@ import com.smsntfy.SmsNtfyApplication
 import com.smsntfy.data.Preferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,7 +40,9 @@ class SseClient(context: Context) {
         .build()
 
     private var eventSource: EventSource? = null
-    private val scope = CoroutineScope(Dispatchers.IO)
+    private var reconnectJob: Job? = null
+    @Volatile private var stopped = true
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
@@ -67,19 +71,28 @@ class SseClient(context: Context) {
 
     private var retryDelayMs = 1_000L
 
+    @Synchronized
     fun start() {
-        if (eventSource != null) {
+        if (!stopped && eventSource != null) {
             Log.d(TAG, "SSE already running")
             return
         }
         Log.d(TAG, "Starting SSE connection")
+        stopped = false
+        reconnectJob?.cancel()
+        reconnectJob = null
         connect()
     }
 
+    @Synchronized
     fun stop() {
         Log.d(TAG, "Stopping SSE connection")
-        eventSource?.cancel()
+        stopped = true
+        reconnectJob?.cancel()
+        reconnectJob = null
+        val source = eventSource
         eventSource = null
+        source?.cancel()
         _connectionState.value = ConnectionState.Disconnected
     }
 
@@ -101,6 +114,10 @@ class SseClient(context: Context) {
 
         val listener = object : EventSourceListener() {
             override fun onOpen(eventSource: EventSource, response: Response) {
+                if (this@SseClient.eventSource !== eventSource || stopped) {
+                    eventSource.cancel()
+                    return
+                }
                 Log.d(TAG, "SSE connection opened")
                 retryDelayMs = 1_000L
                 _connectionState.value = ConnectionState.Connected
@@ -118,36 +135,46 @@ class SseClient(context: Context) {
             }
 
             override fun onClosed(eventSource: EventSource) {
+                val isCurrent = this@SseClient.eventSource === eventSource
                 Log.d(TAG, "SSE connection closed")
+                if (!isCurrent) return
+                this@SseClient.eventSource = null
                 _connectionState.value = ConnectionState.Disconnected
+                if (SseReconnectPolicy.shouldReconnect(stopped, callbackIsCurrent = true)) {
+                    scheduleReconnect()
+                }
             }
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
+                val isCurrent = this@SseClient.eventSource === eventSource
                 val errorMsg = t?.message ?: "Unknown error"
                 Log.e(TAG, "SSE connection failed: $errorMsg", t)
-                _connectionState.value = ConnectionState.Error(errorMsg)
                 eventSource.cancel()
-                scheduleReconnect()
+                if (!isCurrent) return
+                this@SseClient.eventSource = null
+                _connectionState.value = ConnectionState.Error(errorMsg)
+                if (SseReconnectPolicy.shouldReconnect(stopped, callbackIsCurrent = true)) {
+                    scheduleReconnect()
+                }
             }
         }
 
         eventSource = EventSources.createFactory(client).newEventSource(request, listener)
     }
 
+    @Synchronized
     private fun scheduleReconnect() {
-        scope.launch {
-            Log.d(TAG, "Scheduling reconnect in ${retryDelayMs}ms")
-            delay(retryDelayMs)
-
-            // Exponential backoff
-            retryDelayMs = minOf(retryDelayMs * 2, MAX_RETRY_DELAY_MS)
-
-            if (eventSource == null) {
-                // Already stopped
-                return@launch
+        if (stopped || reconnectJob?.isActive == true) return
+        val delayMs = retryDelayMs
+        reconnectJob = scope.launch {
+            Log.d(TAG, "Scheduling reconnect in ${delayMs}ms")
+            delay(delayMs)
+            retryDelayMs = minOf(delayMs * 2, MAX_RETRY_DELAY_MS)
+            synchronized(this@SseClient) {
+                reconnectJob = null
+                if (stopped || eventSource != null) return@synchronized
+                connect()
             }
-
-            connect()
         }
     }
 
@@ -155,25 +182,8 @@ class SseClient(context: Context) {
      * Parses an SSE message's data field (JSON) into a ntfy message object.
      */
     fun parseNtfyMessage(data: String): NtfySseData? {
-        return try {
-            // Simple JSON parsing without external dependencies
-            val idRegex = """"id"\s*:\s*"([^"]*)"""".toRegex()
-            val messageRegex = """"message"\s*:\s*"([^"]*)"""".toRegex()
-            val titleRegex = """"title"\s*:\s*"([^"]*)"""".toRegex()
-            val priorityRegex = """"priority"\s*:\s*(\d+)""".toRegex()
-            val tagsRegex = """"tags"\s*:\s*\[([^\]]*)\]""".toRegex()
-
-            val id = idRegex.find(data)?.groupValues?.getOrNull(1) ?: ""
-            val message = messageRegex.find(data)?.groupValues?.getOrNull(1) ?: ""
-            val title = titleRegex.find(data)?.groupValues?.getOrNull(1) ?: ""
-            val priority = priorityRegex.find(data)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 3
-            val tagsStr = tagsRegex.find(data)?.groupValues?.getOrNull(1) ?: ""
-            val tags = if (tagsStr.isEmpty()) emptyList() else tagsStr.split(",").map { it.trim().trim('"') }
-
-            NtfySseData(id, message, title, priority, tags)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse SSE message", e)
-            null
+        return NtfyEventParser.parse(data)?.let {
+            NtfySseData(it.id, it.message, it.title, it.priority, it.tags)
         }
     }
 

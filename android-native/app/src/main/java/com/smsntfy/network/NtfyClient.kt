@@ -5,13 +5,7 @@ import android.util.Base64
 import android.util.Log
 import com.smsntfy.SmsNtfyApplication
 import com.smsntfy.data.Preferences
-import com.squareup.moshi.JsonAdapter
-import com.squareup.moshi.Moshi
-import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -23,9 +17,6 @@ import kotlinx.coroutines.withContext
 class NtfyClient(context: Context) {
 
     private val prefs = (context.applicationContext as SmsNtfyApplication).preferences
-    private val moshi = Moshi.Builder()
-        .add(KotlinJsonAdapterFactory())
-        .build()
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -35,8 +26,6 @@ class NtfyClient(context: Context) {
 
     companion object {
         private const val TAG = "NtfyClient"
-        private const val MEDIA_TYPE_JSON = "application/json; charset=utf-8"
-        private const val MEDIA_TYPE_TEXT = "text/plain; charset=utf-8"
     }
 
     /**
@@ -46,6 +35,7 @@ class NtfyClient(context: Context) {
         sender: String,
         contact: String,
         message: String,
+        replyId: String,
         timestamp: Long = System.currentTimeMillis()
     ): Boolean {
         return withContext(Dispatchers.IO) {
@@ -56,27 +46,18 @@ class NtfyClient(context: Context) {
                     "$contact <$sender>"
                 }
 
-                val body = NtfyMessage(
-                    topic = prefs.ntfyTopic,
-                    message = message,
-                    title = title,
-                    priority = prefs.ntfyPriority,
-                    tags = arrayOf("sms", "inbox"),
-                    click = "sms:$sender",
-                    email = null,
-                    actions = arrayOf(
-                        NtfyAction(
-                            action = "view",
-                            label = "View",
-                            url = "sms:$sender"
-                        )
+                val request = buildRequest(
+                    body = NtfyPayloadFormatter.sms(
+                        replyId, sender, contact, NtfyPayloadFormatter.timestamp(timestamp), message
+                    ),
+                    metadata = NtfyPublishMetadata(
+                        title = title,
+                        priority = prefs.ntfyPriority,
+                        tags = listOf("sms", "inbox"),
+                        click = "sms:$sender",
+                        actions = listOf(NtfyPublishAction("view", "View", "sms:$sender"))
                     )
                 )
-
-                val jsonAdapter: JsonAdapter<NtfyMessage> = moshi.adapter(NtfyMessage::class.java)
-                val json = jsonAdapter.toJson(body)
-
-                val request = buildRequest(json)
 
                 val response = client.newCall(request).execute()
                 val success = response.isSuccessful
@@ -109,34 +90,26 @@ class NtfyClient(context: Context) {
                     "$callerName <$callerNumber>"
                 }
 
-                val (messageText, tags) = when (callState) {
-                    "ringing" -> "Incoming call from $callerName ($callerNumber)" to arrayOf("call", "ringing")
-                    "missed" -> "Missed call from $callerName ($callerNumber)" to arrayOf("call", "missed")
-                    "answered" -> "Call answered from $callerName ($callerNumber)" to arrayOf("call", "answered")
-                    else -> "Call event: $callState" to arrayOf("call")
+                val tags = when (callState) {
+                    "ringing" -> arrayOf("call", "ringing")
+                    "missed" -> arrayOf("call", "missed")
+                    "answered" -> arrayOf("call", "answered")
+                    else -> arrayOf("call")
                 }
-
-                val body = NtfyMessage(
-                    topic = prefs.ntfyTopic,
-                    message = messageText,
-                    title = title,
-                    priority = prefs.ntfyPriority,
-                    tags = tags,
-                    click = "tel:$callerNumber",
-                    email = null,
-                    actions = arrayOf(
-                        NtfyAction(
-                            action = "view",
-                            label = "Call Back",
-                            url = "tel:$callerNumber"
-                        )
-                    )
+                val messageText = NtfyPayloadFormatter.call(
+                    callerNumber, callerName, callState, NtfyPayloadFormatter.timestamp(timestamp)
                 )
 
-                val jsonAdapter: JsonAdapter<NtfyMessage> = moshi.adapter(NtfyMessage::class.java)
-                val json = jsonAdapter.toJson(body)
-
-                val request = buildRequest(json)
+                val request = buildRequest(
+                    body = messageText,
+                    metadata = NtfyPublishMetadata(
+                        title = title,
+                        priority = prefs.ntfyPriority,
+                        tags = tags.toList(),
+                        click = "tel:$callerNumber",
+                        actions = listOf(NtfyPublishAction("view", "Call Back", "tel:$callerNumber"))
+                    )
+                )
 
                 val response = client.newCall(request).execute()
                 val success = response.isSuccessful
@@ -158,21 +131,10 @@ class NtfyClient(context: Context) {
     suspend fun sendTestMessage(): Boolean {
         return withContext(Dispatchers.IO) {
             try {
-                val body = NtfyMessage(
-                    topic = prefs.ntfyTopic,
-                    message = "Test message from SMS-to-Ntfy Android app",
-                    title = "SMS-to-Ntfy Test",
-                    priority = 3,
-                    tags = arrayOf("test"),
-                    click = null,
-                    email = null,
-                    actions = null
+                val request = buildRequest(
+                    body = "Test message from SMS-to-Ntfy Android app",
+                    metadata = NtfyPublishMetadata("SMS-to-Ntfy Test", 3, listOf("test"), null, emptyList())
                 )
-
-                val jsonAdapter: JsonAdapter<NtfyMessage> = moshi.adapter(NtfyMessage::class.java)
-                val json = jsonAdapter.toJson(body)
-
-                val request = buildRequest(json)
 
                 val response = client.newCall(request).execute()
                 val success = response.isSuccessful
@@ -188,43 +150,13 @@ class NtfyClient(context: Context) {
         }
     }
 
-    /**
-     * Builds the HTTP request with authentication.
-     */
-    private fun buildRequest(json: String): Request {
-        val url = prefs.getNtfySendUrl()
-
-        val requestBuilder = Request.Builder()
-            .url(url)
-            .post(json.toRequestBody(MEDIA_TYPE_JSON.toMediaType()))
-
-        // Add Basic Auth if credentials provided
-        if (prefs.ntfyUsername.isNotEmpty() && prefs.ntfyPassword.isNotEmpty()) {
+    /** Builds a raw text publish request with ntfy metadata headers and optional Basic auth. */
+    private fun buildRequest(body: String, metadata: NtfyPublishMetadata): okhttp3.Request {
+        val authorization = if (prefs.ntfyUsername.isNotEmpty() && prefs.ntfyPassword.isNotEmpty()) {
             val credentials = "${prefs.ntfyUsername}:${prefs.ntfyPassword}"
-            val encoded = Base64.encodeToString(credentials.toByteArray(), Base64.NO_WRAP)
-            requestBuilder.addHeader("Authorization", "Basic $encoded")
-        }
-
-        return requestBuilder.build()
+            "Basic ${Base64.encodeToString(credentials.toByteArray(), Base64.NO_WRAP)}"
+        } else null
+        return NtfyPublishRequest.build(prefs.getNtfySendUrl(), body, metadata, authorization)
     }
 
-    /**
-     * Data class for ntfy message payload.
-     */
-    private data class NtfyMessage(
-        val topic: String,
-        val message: String,
-        val title: String,
-        val priority: Int,
-        val tags: Array<String>,
-        val click: String?,
-        val email: String?,
-        val actions: Array<NtfyAction>?
-    )
-
-    private data class NtfyAction(
-        val action: String,
-        val label: String,
-        val url: String
-    )
 }

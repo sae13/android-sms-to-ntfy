@@ -27,6 +27,7 @@ class Preferences(context: Context) {
         const val KEY_LAST_CONTACT = "last_contact"
         const val KEY_USE_BASE64 = "use_base64"
         const val KEY_PRIORITY = "ntfy_priority"
+
     }
 
     var ntfyServer: String
@@ -84,6 +85,8 @@ class Preferences(context: Context) {
     var ntfyPriority: Int
         get() = prefs.getInt(KEY_PRIORITY, 4)
         set(value) = prefs.edit().putInt(KEY_PRIORITY, value).apply()
+
+
 
     /**
      * Returns the full ntfy topic URL for sending messages.

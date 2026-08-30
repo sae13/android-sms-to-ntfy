@@ -15,6 +15,8 @@ import com.smsntfy.R
 import com.smsntfy.SmsNtfyApplication
 import com.smsntfy.data.EventLog
 import com.smsntfy.network.NtfyClient
+import com.smsntfy.network.NtfyEventParser
+import com.smsntfy.network.NtfyParseResult
 import com.smsntfy.network.SseClient
 import com.smsntfy.receiver.CallReceiver
 import com.smsntfy.sms.ContactHelper
@@ -23,6 +25,7 @@ import com.smsntfy.util.WakeLockHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
@@ -59,14 +62,15 @@ class SmsForwardingService : Service() {
         const val EXTRA_REPLY_MESSAGE = "reply_message"
     }
 
-    private val scope = CoroutineScope(Dispatchers.Main)
-    private val ioScope = CoroutineScope(Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var ntfyClient: NtfyClient? = null
     private var sseClient: SseClient? = null
     private var sseJob: Job? = null
     private var database: com.smsntfy.data.AppDatabase? = null
     private var prefs: com.smsntfy.data.Preferences? = null
     private var callReceiver: CallReceiver? = null
+    private var staleClaimsChecked = false
     private val oneShotStarts = OneShotStartTracker()
 
     override fun onCreate() {
@@ -159,6 +163,22 @@ class SmsForwardingService : Service() {
         prefs = app.preferences
         callReceiver = CallReceiver()
         startCallListener()
+        if (!staleClaimsChecked) {
+            staleClaimsChecked = true
+            val startupCutoff = System.currentTimeMillis()
+            ioScope.launch {
+                val count = app.database.ntfyCommandDao().finalizeStaleClaims(startupCutoff, System.currentTimeMillis())
+                if (count > 0) {
+                    Log.e(TAG, "$count stale reply claim(s) finalized as failed; at-most-once policy prevents retry")
+                    logEvent(
+                        "error",
+                        "Interrupted replies finalized as failed",
+                        "$count claimed command(s) were interrupted before completion and will not be retried",
+                        success = false
+                    )
+                }
+            }
+        }
     }
 
     private fun startServiceInternal() {
@@ -245,15 +265,14 @@ class SmsForwardingService : Service() {
         // Get contact name
         val contact = ContactHelper.getContactName(this, sender)
 
-        // Store last sender for reply
-        prefs?.lastSender = sender
-        prefs?.lastContact = contact
+        val mapping = database?.replyMappingDao()?.allocateAndInsert(sender, timestamp) ?: return
+        val replyId = mapping.replyId
 
         // Log event
         logEvent("sms", "SMS from $contact", body, sender, contact)
 
         // Forward to ntfy
-        ntfyClient?.sendSmsNotification(sender, contact, body, timestamp)
+        ntfyClient?.sendSmsNotification(sender, contact, body, ReplyPolicy.formatId(replyId), timestamp)
             ?.also { success ->
                 if (success) {
                     logEvent("sms", "SMS forwarded to ntfy", "From: $contact ($sender)", sender, contact)
@@ -348,7 +367,15 @@ class SmsForwardingService : Service() {
 
         sseJob = scope.launch {
             sseClient?.messages?.collect { sseMessage ->
-                handleSseMessage(sseMessage)
+                try {
+                    handleSseMessage(sseMessage)
+                } catch (error: Exception) {
+                    Log.e(TAG, "Unhandled reply event failure; continuing SSE collection", error)
+                    logEvent("error", "Reply event processing failed", error.message ?: error.javaClass.simpleName, success = false)
+                } catch (error: LinkageError) {
+                    Log.e(TAG, "Unhandled reply event linkage failure; continuing SSE collection", error)
+                    logEvent("error", "Reply event processing failed", error.message ?: error.javaClass.simpleName, success = false)
+                }
             }
         }
     }
@@ -362,38 +389,73 @@ class SmsForwardingService : Service() {
 
     private fun handleSseMessage(sseMessage: SseClient.SseMessage) {
         Log.d(TAG, "Received SSE message: ${sseMessage.data.take(100)}")
-
-        // Parse the ntfy message
-        val parsed = sseClient?.parseNtfyMessage(sseMessage.data)
-        if (parsed == null) return
-
-        logEvent("sse", "SSE message received", parsed.message, "", "")
-
-        // Check if this is a reply message (contains "reply" tag or specific format)
-        // Expected format: "REPLY:+1234567890:Your message here"
-        // Or check if message starts with "REPLY:"
-        if (parsed.message.startsWith("REPLY:") || parsed.tags.contains("reply")) {
-            processReplyMessage(parsed.message)
+        when (val parsed = NtfyEventParser.parseResult(sseMessage.data)) {
+            is NtfyParseResult.Malformed -> {
+                Log.e(TAG, "Malformed SSE JSON: ${parsed.reason}")
+                logEvent("error", "Malformed SSE JSON", parsed.reason, success = false)
+            }
+            is NtfyParseResult.Success -> {
+                if (parsed.data.event != "message") return
+                logEvent("sse", "SSE message received", parsed.data.message, "", "")
+                processReplyMessage(parsed.data.id.ifBlank { sseMessage.id }, parsed.data.message)
+            }
         }
     }
 
-    private fun processReplyMessage(message: String) {
-        // Expected format: "REPLY:+1234567890:Your message here"
-        // Or JSON format from ntfy
-        val parts = message.split(":", limit = 3)
-        if (parts.size >= 3 && parts[0] == "REPLY") {
-            val number = parts[1]
-            val replyText = parts[2]
-
-            Log.d(TAG, "Processing reply to $number: $replyText")
-
-            // Send the reply SMS
-            val intent = Intent(this, SmsForwardingService::class.java).apply {
-                action = ACTION_SEND_REPLY
-                putExtra(EXTRA_REPLY_NUMBER, number)
-                putExtra(EXTRA_REPLY_MESSAGE, replyText)
+    private fun processReplyMessage(eventId: String, message: String) {
+        val route = ReplyRouting.route(eventId, message)
+        if (route !is ReplyRoute.Command) {
+            val title = if (route == ReplyRoute.InvalidEventId) "Missing ntfy event id" else "Invalid reply command"
+            Log.e(TAG, "$title; reply rejected")
+            logEvent("error", title, message, success = false)
+            return
+        }
+        ioScope.launch {
+            var claimedEventId: String? = null
+            try {
+                val db = database ?: throw IllegalStateException("Database unavailable")
+                if (!db.ntfyCommandDao().claim(route.eventId, System.currentTimeMillis())) {
+                    Log.w(TAG, "Duplicate ntfy command ignored: ${route.eventId}")
+                    return@launch
+                }
+                claimedEventId = route.eventId
+                val mapping = db.replyMappingDao().findNewest(route.command.id)
+                if (mapping == null) {
+                    db.ntfyCommandDao().complete(route.eventId, "invalid", System.currentTimeMillis())
+                    logEvent("error", "Unknown reply id", ReplyPolicy.formatId(route.command.id), success = false)
+                    return@launch
+                }
+                val success = SmsReplyHelper.sendSmsReply(
+                    this@SmsForwardingService, mapping.phoneNumber, route.command.message
+                )
+                val outcome = if (success) "sent" else "failed"
+                db.ntfyCommandDao().complete(route.eventId, outcome, System.currentTimeMillis())
+                val contact = ContactHelper.getContactName(this@SmsForwardingService, mapping.phoneNumber)
+                if (success) {
+                    logEvent("sent", "Reply sent to $contact", route.command.message, mapping.phoneNumber, contact)
+                } else {
+                    logEvent("error", "Failed to send reply; event will not be retried", route.command.message, mapping.phoneNumber, contact, false)
+                }
+            } catch (error: Exception) {
+                Log.e(TAG, "Reply handling failed; event will not be retried if already claimed", error)
+                finalizeClaimFailure(claimedEventId, error)
+                logEvent("error", "Reply handling failed", error.message ?: error.javaClass.simpleName, success = false)
+            } catch (error: LinkageError) {
+                Log.e(TAG, "Reply handling linkage failure", error)
+                finalizeClaimFailure(claimedEventId, error)
+                logEvent("error", "Reply handling failed", error.message ?: error.javaClass.simpleName, success = false)
             }
-            startService(intent)
+        }
+    }
+
+    private suspend fun finalizeClaimFailure(eventId: String?, error: Throwable) {
+        if (eventId == null) return
+        try {
+            val updated = database?.ntfyCommandDao()?.complete(eventId, "failed", System.currentTimeMillis()) ?: 0
+            if (updated == 0) Log.e(TAG, "Claim $eventId was not finalized after failure", error)
+            else Log.e(TAG, "Claim $eventId durably finalized as failed; at-most-once policy prevents retry", error)
+        } catch (persistenceError: Exception) {
+            Log.e(TAG, "CRITICAL: failed to durably finalize claim $eventId", persistenceError)
         }
     }
 
