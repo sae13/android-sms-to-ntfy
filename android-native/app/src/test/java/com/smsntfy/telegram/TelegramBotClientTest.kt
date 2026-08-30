@@ -43,6 +43,14 @@ class TelegramBotClientTest {
     }
 
     @Test
+    fun rejectedOrMalformedUpdatePayloadIsFailure() {
+        assertTrue(client.parseUpdatesResultForTest("{\"ok\":false}") is TelegramUpdatesResult.Failed)
+        assertTrue(client.parseUpdatesResultForTest("{\"ok\":true}") is TelegramUpdatesResult.Failed)
+        assertTrue(client.parseUpdatesResultForTest("{\"ok\":true,\"result\":null}") is TelegramUpdatesResult.Failed)
+        assertTrue(client.parseUpdatesResultForTest("not-json") is TelegramUpdatesResult.Failed)
+    }
+
+    @Test
     fun formatsSmsWithoutEmbeddingCredentials() {
         val body = TelegramBotClient.formatSmsMessage("+15551234567", "Alice", "hello", 123)
         assertTrue(body.contains("Alice"))

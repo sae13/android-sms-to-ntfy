@@ -142,9 +142,24 @@ class TelegramBotClient private constructor(
         val timeout = timeoutSeconds.coerceIn(0, 50)
         val body = """{"offset":$offset,"timeout":$timeout,"allowed_updates":["message","edited_message"]}"""
         request(config, "getUpdates", body).fold(
-            onSuccess = { TelegramUpdatesResult.Success(parseUpdates(it)) },
+            onSuccess = { parseUpdatesResult(it) },
             onFailure = { TelegramUpdatesResult.Failed(redactedError(it)) }
         )
+    }
+
+    internal fun parseUpdatesResultForTest(json: String): TelegramUpdatesResult = parseUpdatesResult(json)
+
+    private fun parseUpdatesResult(json: String): TelegramUpdatesResult {
+        val moshi = Moshi.Builder()
+            .add(KotlinJsonAdapterFactory())
+            .build()
+        val root = runCatching {
+            moshi.adapter(TelegramApiResponse::class.java).fromJson(json)
+        }.getOrNull() ?: return TelegramUpdatesResult.Failed("Telegram returned an invalid update response")
+        if (!root.ok) return TelegramUpdatesResult.Failed("Telegram rejected getUpdates")
+        val updates = root.result
+            ?: return TelegramUpdatesResult.Failed("Telegram returned an invalid update response")
+        return TelegramUpdatesResult.Success(updates.mapNotNull { it.toPublic() })
     }
 
     suspend fun testConnection(): Boolean = withContext(Dispatchers.IO) {

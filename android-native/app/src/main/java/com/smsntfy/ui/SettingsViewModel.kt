@@ -64,10 +64,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun testTelegram(onComplete: (Boolean) -> Unit) {
+    fun testTelegram(config: com.smsntfy.telegram.TelegramConfig, onComplete: (Boolean) -> Unit) {
         viewModelScope.launch {
             val success = try {
-                app.telegramBotClient.testConnection()
+                com.smsntfy.telegram.TelegramBotClient { config }.testConnection()
             } catch (_: Exception) {
                 false
             } catch (_: LinkageError) {

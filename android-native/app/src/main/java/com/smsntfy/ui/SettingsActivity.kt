@@ -15,6 +15,9 @@ import com.smsntfy.databinding.ActivitySettingsBinding
 import com.smsntfy.SmsNtfyApplication
 import com.smsntfy.deltachat.DeltaChatSetupResult
 import com.smsntfy.deltachat.DeltaChatSendResult
+import com.smsntfy.telegram.TelegramSettingsField
+import com.smsntfy.telegram.TelegramSettingsPolicy
+import com.smsntfy.telegram.TelegramSettingsValidation
 
 class SettingsActivity : AppCompatActivity() {
 
@@ -62,12 +65,15 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
         binding.btnTestTelegram.setOnClickListener {
-            viewModel.testTelegram { success ->
-                Toast.makeText(
-                    this,
-                    getString(if (success) R.string.telegram_test_sent else R.string.telegram_test_failed),
-                    Toast.LENGTH_LONG
-                ).show()
+            when (val validation = telegramSettingsValidation(requestedEnabled = true)) {
+                is TelegramSettingsValidation.Invalid -> showTelegramValidationError(validation.field)
+                is TelegramSettingsValidation.Valid -> viewModel.testTelegram(validation.config) { success ->
+                    Toast.makeText(
+                        this,
+                        getString(if (success) R.string.telegram_test_sent else R.string.telegram_test_failed),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             }
         }
     }
@@ -98,6 +104,25 @@ class SettingsActivity : AppCompatActivity() {
         val app = application as SmsNtfyApplication
         val prefs = app.preferences
 
+        // Validate and durably persist the only failure-capable settings batch
+        // before changing any of the legacy individually-applied preferences.
+        val telegramValidation = telegramSettingsValidation(binding.cbEnableTelegram.isChecked)
+        if (telegramValidation is TelegramSettingsValidation.Invalid) {
+            showTelegramValidationError(telegramValidation.field)
+            return
+        }
+        val telegramConfig = (telegramValidation as TelegramSettingsValidation.Valid).config
+        if (!prefs.saveTelegramSettings(
+                telegramConfig.enabled,
+                telegramConfig.botToken,
+                telegramConfig.chatId,
+                telegramConfig.proxy
+            )
+        ) {
+            Toast.makeText(this, R.string.telegram_settings_save_failed, Toast.LENGTH_LONG).show()
+            return
+        }
+
         prefs.ntfyServer = binding.etServerUrl.text.toString().trim()
         prefs.ntfyTopic = binding.etTopic.text.toString().trim()
         prefs.ntfyUsername = binding.etUsername.text.toString().trim()
@@ -109,13 +134,6 @@ class SettingsActivity : AppCompatActivity() {
         prefs.useBase64 = binding.cbUseBase64.isChecked
         prefs.ntfyPriority = binding.spinnerPriority.selectedItemPosition
         prefs.deltaChatEnabled = binding.cbEnableDeltaChat.isChecked && prefs.deltaChatChatId > 0
-        prefs.telegramBotToken = binding.etTelegramBotToken.text?.toString()?.trim().orEmpty()
-        prefs.telegramChatId = binding.etTelegramChatId.text?.toString()?.trim().orEmpty()
-        prefs.telegramProxy = binding.etTelegramProxy.text?.toString()?.trim().orEmpty()
-        prefs.telegramEnabled = binding.cbEnableTelegram.isChecked &&
-            com.smsntfy.telegram.TelegramBotClient.isValidBotToken(prefs.telegramBotToken) &&
-            com.smsntfy.telegram.TelegramBotClient.isValidChatId(prefs.telegramChatId) &&
-            com.smsntfy.telegram.TelegramProxy.parse(prefs.telegramProxy).isSuccess
 
         if (prefs.isServiceRunning) {
             val serviceIntent = Intent(this, com.smsntfy.service.SmsForwardingService::class.java).apply {
@@ -130,6 +148,23 @@ class SettingsActivity : AppCompatActivity() {
 
         Toast.makeText(this, "Settings saved", Toast.LENGTH_SHORT).show()
         finish()
+    }
+
+    private fun telegramSettingsValidation(requestedEnabled: Boolean): TelegramSettingsValidation =
+        TelegramSettingsPolicy.validate(
+            requestedEnabled = requestedEnabled,
+            botToken = binding.etTelegramBotToken.text?.toString().orEmpty(),
+            chatId = binding.etTelegramChatId.text?.toString().orEmpty(),
+            proxy = binding.etTelegramProxy.text?.toString().orEmpty()
+        )
+
+    private fun showTelegramValidationError(field: TelegramSettingsField) {
+        val message = when (field) {
+            TelegramSettingsField.BOT_TOKEN -> R.string.telegram_invalid_token
+            TelegramSettingsField.CHAT_ID -> R.string.telegram_invalid_chat_id
+            TelegramSettingsField.PROXY -> R.string.telegram_invalid_proxy
+        }
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 
     private fun setupDeltaChat() {

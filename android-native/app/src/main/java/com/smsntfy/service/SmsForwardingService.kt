@@ -500,29 +500,51 @@ class SmsForwardingService : Service() {
         telegramPollingJob = ioScope.launch {
             var retryDelay = 1_000L
             while (isActive && prefs?.telegramEnabled == true) {
-                when (val result = client.getUpdates(db.telegramStateDao().nextOffset(), timeoutSeconds = 50)) {
-                    is TelegramUpdatesResult.Success -> {
-                        retryDelay = 1_000L
-                        for (update in result.updates.sortedBy { it.updateId }) {
-                            try {
-                                handleTelegramUpdate(update)
-                            } catch (error: Exception) {
-                                Log.e(TAG, "Telegram update handling failed", error)
-                                logEvent("error", "Telegram update handling failed", "Update rejected", success = false)
-                            } catch (error: LinkageError) {
-                                Log.e(TAG, "Telegram update linkage failure", error)
-                                logEvent("error", "Telegram update handling failed", "Update rejected", success = false)
-                            } finally {
-                                // Offset advancement is durable and monotonic.
-                                db.telegramStateDao().advanceTo(update.updateId + 1)
+                try {
+                    when (val result = client.getUpdates(db.telegramStateDao().nextOffset(), timeoutSeconds = 50)) {
+                        is TelegramUpdatesResult.Success -> {
+                            retryDelay = 1_000L
+                            for (update in result.updates.sortedBy { it.updateId }) {
+                                try {
+                                    handleTelegramUpdate(update)
+                                } catch (error: kotlinx.coroutines.CancellationException) {
+                                    throw error
+                                } catch (error: Exception) {
+                                    Log.e(TAG, "Telegram update handling failed", error)
+                                    logEvent("error", "Telegram update handling failed", "Update finalized by at-most-once policy", success = false)
+                                } catch (error: LinkageError) {
+                                    Log.e(TAG, "Telegram update linkage failure", error)
+                                    logEvent("error", "Telegram update handling failed", "Update finalized by at-most-once policy", success = false)
+                                }
+                                val offsetDecision = com.smsntfy.telegram.TelegramPollingDecision.afterUpdate(update.updateId)
+                                if (offsetDecision.stopPolling) {
+                                    Log.e(TAG, "Telegram update ID exhausted; stopping polling")
+                                    logEvent("error", "Telegram polling stopped", "Update ID exhausted", success = false)
+                                    return@launch
+                                }
+                                if (offsetDecision.advanceOffset) {
+                                    db.telegramStateDao().advanceTo(offsetDecision.nextOffset)
+                                } else {
+                                    break
+                                }
                             }
                         }
+                        is TelegramUpdatesResult.Failed -> {
+                            Log.e(TAG, "Telegram polling failed: ${result.reason}")
+                            delay(retryDelay)
+                            retryDelay = minOf(retryDelay * 2, 30_000L)
+                        }
                     }
-                    is TelegramUpdatesResult.Failed -> {
-                        Log.e(TAG, "Telegram polling failed: ${result.reason}")
-                        delay(retryDelay)
-                        retryDelay = minOf(retryDelay * 2, 30_000L)
-                    }
+                } catch (error: kotlinx.coroutines.CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    Log.e(TAG, "Telegram polling loop failed; retrying", error)
+                    delay(retryDelay)
+                    retryDelay = minOf(retryDelay * 2, 30_000L)
+                } catch (error: LinkageError) {
+                    Log.e(TAG, "Telegram polling loop linkage failure; retrying", error)
+                    delay(retryDelay)
+                    retryDelay = minOf(retryDelay * 2, 30_000L)
                 }
             }
         }

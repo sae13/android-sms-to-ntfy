@@ -55,6 +55,10 @@
     <string name="test_telegram">Test Telegram connection</string>
     <string name="telegram_test_sent">Telegram connection succeeded</string>
     <string name="telegram_test_failed">Telegram connection failed</string>
+    <string name="telegram_invalid_token">Telegram bot token is invalid</string>
+    <string name="telegram_invalid_chat_id">Telegram chat ID is invalid</string>
+    <string name="telegram_invalid_proxy">Telegram proxy is invalid</string>
+    <string name="telegram_settings_save_failed">Telegram settings could not be saved</string>
     
     <!-- Status -->
     <string name="status_connected">Connected</string>
