@@ -21,6 +21,11 @@ sealed interface DeltaChatSetupResult {
     data class Failed(val reason: String) : DeltaChatSetupResult
 }
 
+sealed interface DeltaChatSendResult {
+    data object Sent : DeltaChatSendResult
+    data class Failed(val reason: String) : DeltaChatSendResult
+}
+
 class DeltaChatClient(
     private val core: DeltaChatCore,
     private val loadAccountId: () -> Int,
@@ -45,15 +50,24 @@ class DeltaChatClient(
         }
     }
 
-    suspend fun sendText(chatId: Int, text: String): Boolean = withContext(Dispatchers.IO) {
-        if (chatId <= 0 || text.isBlank()) return@withContext false
+    suspend fun sendText(chatId: Int, text: String): Boolean =
+        sendTextWithResult(chatId, text) is DeltaChatSendResult.Sent
+
+    suspend fun sendTextWithResult(chatId: Int, text: String): DeltaChatSendResult = withContext(Dispatchers.IO) {
+        if (chatId <= 0 || text.isBlank()) {
+            return@withContext DeltaChatSendResult.Failed("Delta Chat destination is not configured")
+        }
         operationMutex.withLock {
             try {
                 core.selectAccount(loadAccountId())
                 core.startIo()
-                core.sendText(chatId, text)
-            } catch (_: Exception) {
-                false
+                if (core.sendText(chatId, text)) {
+                    DeltaChatSendResult.Sent
+                } else {
+                    DeltaChatSendResult.Failed("Delta Chat rejected the message")
+                }
+            } catch (error: Exception) {
+                DeltaChatSendResult.Failed(redactedReason(error))
             }
         }
     }

@@ -97,14 +97,18 @@ public class SettableFuture<T> implements ListenableFuture<T> {
   public synchronized T get(long timeout, TimeUnit unit)
       throws InterruptedException, ExecutionException, TimeoutException
   {
-    long startTime = System.currentTimeMillis();
+    long timeoutMillis = unit.toMillis(timeout);
+    long deadlineNanos = System.nanoTime() + unit.toNanos(timeout);
 
-    while (!completed && System.currentTimeMillis() - startTime > unit.toMillis(timeout)) {
-      wait(unit.toMillis(timeout));
+    while (!completed && !canceled) {
+      long remainingNanos = deadlineNanos - System.nanoTime();
+      if (remainingNanos <= 0) break;
+      long remainingMillis = TimeUnit.NANOSECONDS.toMillis(remainingNanos);
+      wait(Math.max(1, Math.min(timeoutMillis, remainingMillis)));
     }
 
     if (!completed) throw new TimeoutException();
-    else            return get();
+    return get();
   }
 
   @Override

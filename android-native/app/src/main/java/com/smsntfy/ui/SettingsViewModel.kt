@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.smsntfy.SmsNtfyApplication
 import com.smsntfy.deltachat.DeltaChatSetupResult
+import com.smsntfy.deltachat.DeltaChatSendResult
 import com.smsntfy.network.NtfyClient
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -42,21 +43,24 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun testDeltaChat(onComplete: (Boolean) -> Unit) {
+    fun testDeltaChat(onComplete: (DeltaChatSendResult) -> Unit) {
         viewModelScope.launch {
             val prefs = app.preferences
-            val success = if (prefs.deltaChatEnabled && prefs.deltaChatChatId > 0) {
+            val result = if (prefs.deltaChatEnabled && prefs.deltaChatChatId > 0) {
                 try {
-                    app.deltaChatClient.sendText(prefs.deltaChatChatId, "SMS-to-Ntfy Delta Chat test")
+                    app.deltaChatClient.sendTextWithResult(
+                        prefs.deltaChatChatId,
+                        "SMS-to-Ntfy Delta Chat test"
+                    )
                 } catch (_: Exception) {
-                    false
+                    DeltaChatSendResult.Failed("Delta Chat test failed")
                 } catch (_: LinkageError) {
-                    false
+                    DeltaChatSendResult.Failed("Delta Chat is unavailable on this device")
                 }
             } else {
-                false
+                DeltaChatSendResult.Failed("Delta Chat destination is not configured")
             }
-            onComplete(success)
+            onComplete(result)
         }
     }
 }

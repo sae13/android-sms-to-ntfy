@@ -11,6 +11,7 @@ import com.smsntfy.R
 import com.smsntfy.databinding.ActivitySettingsBinding
 import com.smsntfy.SmsNtfyApplication
 import com.smsntfy.deltachat.DeltaChatSetupResult
+import com.smsntfy.deltachat.DeltaChatSendResult
 
 class SettingsActivity : AppCompatActivity() {
 
@@ -48,12 +49,13 @@ class SettingsActivity : AppCompatActivity() {
         binding.btnTestConnection.setOnClickListener { viewModel.testConnection() }
         binding.btnSetupDeltaChat.setOnClickListener { setupDeltaChat() }
         binding.btnTestDeltaChat.setOnClickListener {
-            viewModel.testDeltaChat { success ->
-                Toast.makeText(
-                    this,
-                    if (success) R.string.deltachat_test_sent else R.string.deltachat_test_failed,
-                    Toast.LENGTH_SHORT
-                ).show()
+            viewModel.testDeltaChat { result ->
+                val message = when (result) {
+                    DeltaChatSendResult.Sent -> getString(R.string.deltachat_test_sent)
+                    is DeltaChatSendResult.Failed ->
+                        getString(R.string.deltachat_test_failed) + ": " + result.reason
+                }
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -111,9 +113,14 @@ class SettingsActivity : AppCompatActivity() {
                 }
                 DeltaChatSetupResult.InvalidLogin -> R.string.deltachat_invalid_login
                 DeltaChatSetupResult.InvalidInvite -> R.string.deltachat_invalid_invite
-                is DeltaChatSetupResult.Failed -> R.string.deltachat_setup_failed
+                is DeltaChatSetupResult.Failed -> null
             }
-            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+            val displayMessage = if (result is DeltaChatSetupResult.Failed) {
+                getString(R.string.deltachat_setup_failed) + ": " + result.reason
+            } else {
+                getString(checkNotNull(message))
+            }
+            Toast.makeText(this, displayMessage, Toast.LENGTH_LONG).show()
         }
         binding.etDeltaChatLogin.text?.clear()
     }
