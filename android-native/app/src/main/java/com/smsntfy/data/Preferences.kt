@@ -3,6 +3,7 @@ package com.smsntfy.data
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.preference.PreferenceManager
+import com.smsntfy.network.NtfyEndpointDefaults
 
 /**
  * Centralized preferences storage for the app.
@@ -31,7 +32,8 @@ class Preferences(context: Context) {
     }
 
     var ntfyServer: String
-        get() = prefs.getString(KEY_NTFY_SERVER, "https://ntfy.sh") ?: "https://ntfy.sh"
+        get() = prefs.getString(KEY_NTFY_SERVER, NtfyEndpointDefaults.serverUrl)
+            ?: NtfyEndpointDefaults.serverUrl
         set(value) = prefs.edit().putString(KEY_NTFY_SERVER, value).apply()
 
     var ntfyTopic: String

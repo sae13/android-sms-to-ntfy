@@ -19,6 +19,7 @@ class NtfyClient(context: Context) {
     private val prefs = (context.applicationContext as SmsNtfyApplication).preferences
 
     private val client = OkHttpClient.Builder()
+        .dns(PinnedDns(NtfyEndpointDefaults.host, NtfyEndpointDefaults.address))
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(10, TimeUnit.SECONDS)

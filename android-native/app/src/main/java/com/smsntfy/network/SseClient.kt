@@ -35,6 +35,7 @@ class SseClient(context: Context) {
     private val prefs = (context.applicationContext as SmsNtfyApplication).preferences
 
     private val client = OkHttpClient.Builder()
+        .dns(PinnedDns(NtfyEndpointDefaults.host, NtfyEndpointDefaults.address))
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.SECONDS) // No timeout for SSE
         .build()
