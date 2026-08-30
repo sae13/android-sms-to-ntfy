@@ -28,7 +28,11 @@ class Preferences(context: Context) {
         const val KEY_LAST_CONTACT = "last_contact"
         const val KEY_USE_BASE64 = "use_base64"
         const val KEY_PRIORITY = "ntfy_priority"
+        const val KEY_DELTACHAT_ENABLED = "deltachat_enabled"
+        const val KEY_DELTACHAT_ACCOUNT_ID = "deltachat_account_id"
+        const val KEY_DELTACHAT_CHAT_ID = "deltachat_chat_id"
 
+        // Deliberately no login-code key: credentials belong only in Delta Chat's private database.
     }
 
     var ntfyServer: String
@@ -88,7 +92,23 @@ class Preferences(context: Context) {
         get() = prefs.getInt(KEY_PRIORITY, 4)
         set(value) = prefs.edit().putInt(KEY_PRIORITY, value).apply()
 
+    var deltaChatEnabled: Boolean
+        get() = prefs.getBoolean(KEY_DELTACHAT_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_DELTACHAT_ENABLED, value).apply()
 
+    var deltaChatAccountId: Int
+        get() = prefs.getInt(KEY_DELTACHAT_ACCOUNT_ID, 0)
+        set(value) = prefs.edit().putInt(KEY_DELTACHAT_ACCOUNT_ID, value).apply()
+
+    var deltaChatChatId: Int
+        get() = prefs.getInt(KEY_DELTACHAT_CHAT_ID, 0)
+        set(value) = prefs.edit().putInt(KEY_DELTACHAT_CHAT_ID, value).apply()
+
+    fun saveDeltaChatDestination(accountId: Int, chatId: Int): Boolean =
+        prefs.edit()
+            .putInt(KEY_DELTACHAT_ACCOUNT_ID, accountId)
+            .putInt(KEY_DELTACHAT_CHAT_ID, chatId)
+            .commit()
 
     /**
      * Returns the full ntfy topic URL for sending messages.

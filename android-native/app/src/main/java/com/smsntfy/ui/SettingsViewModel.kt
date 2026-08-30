@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.smsntfy.SmsNtfyApplication
+import com.smsntfy.deltachat.DeltaChatSetupResult
 import com.smsntfy.network.NtfyClient
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +23,40 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 val msg = if (success) "Test message sent successfully!" else "Failed to send test message"
                 Toast.makeText(app, msg, Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    fun setupDeltaChat(loginCode: String, invite: String, onComplete: (DeltaChatSetupResult) -> Unit) {
+        viewModelScope.launch {
+            val result = try {
+                app.deltaChatClient.setup(loginCode, invite)
+            } catch (_: Exception) {
+                DeltaChatSetupResult.Failed("Delta Chat is unavailable")
+            } catch (_: LinkageError) {
+                DeltaChatSetupResult.Failed("Delta Chat is unavailable on this device")
+            }
+            if (result is DeltaChatSetupResult.Ready) {
+                app.preferences.deltaChatEnabled = true
+            }
+            onComplete(result)
+        }
+    }
+
+    fun testDeltaChat(onComplete: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val prefs = app.preferences
+            val success = if (prefs.deltaChatEnabled && prefs.deltaChatChatId > 0) {
+                try {
+                    app.deltaChatClient.sendText(prefs.deltaChatChatId, "SMS-to-Ntfy Delta Chat test")
+                } catch (_: Exception) {
+                    false
+                } catch (_: LinkageError) {
+                    false
+                }
+            } else {
+                false
+            }
+            onComplete(success)
         }
     }
 }

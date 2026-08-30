@@ -14,7 +14,13 @@ import androidx.core.app.NotificationCompat
 import com.smsntfy.R
 import com.smsntfy.SmsNtfyApplication
 import com.smsntfy.data.EventLog
+import com.smsntfy.deltachat.DeltaChatDestinationPolicy
+import com.smsntfy.deltachat.DeltaChatMessageFormatter
 import com.smsntfy.network.NtfyClient
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import com.smsntfy.network.NtfyEventParser
 import com.smsntfy.network.NtfyParseResult
 import com.smsntfy.network.SseClient
@@ -280,6 +286,23 @@ class SmsForwardingService : Service() {
                     logEvent("error", "Failed to forward SMS", "From: $contact ($sender)", sender, contact, false)
                 }
             }
+
+        val currentPrefs = prefs ?: return
+        if (DeltaChatDestinationPolicy.isReady(currentPrefs.deltaChatEnabled, currentPrefs.deltaChatChatId)) {
+            val text = DeltaChatMessageFormatter.sms(
+                sender = sender,
+                contact = contact,
+                message = body,
+                replyId = ReplyPolicy.formatId(replyId),
+                timestamp = formatTimestamp(timestamp)
+            )
+            val success = sendDeltaChat(currentPrefs.deltaChatChatId, text)
+            if (success) {
+                logEvent("sms", "SMS forwarded to Delta Chat", "Message queued", sender, contact)
+            } else {
+                logEvent("error", "Failed to forward SMS to Delta Chat", "Delta Chat rejected the message", success = false)
+            }
+        }
     }
 
     private fun processCallIntent(intent: Intent, startId: Int) {
@@ -313,6 +336,25 @@ class SmsForwardingService : Service() {
                             logEvent("error", "Failed to send call notification", stateText, number, contact, false)
                         }
                     }
+
+                val currentPrefs = prefs
+                if (currentPrefs != null && DeltaChatDestinationPolicy.isReady(
+                        currentPrefs.deltaChatEnabled,
+                        currentPrefs.deltaChatChatId
+                    )
+                ) {
+                    val text = DeltaChatMessageFormatter.call(
+                        callerNumber = number,
+                        callerName = contact,
+                        callState = stateText,
+                        timestamp = formatTimestamp(System.currentTimeMillis())
+                    )
+                    if (sendDeltaChat(currentPrefs.deltaChatChatId, text)) {
+                        logEvent("call", "Call forwarded to Delta Chat", "Message queued", number, contact)
+                    } else {
+                        logEvent("error", "Failed to forward call to Delta Chat", "Delta Chat rejected the message", success = false)
+                    }
+                }
             } finally {
                 stopOneShotIfNotPersistent(startId)
             }
@@ -457,6 +499,24 @@ class SmsForwardingService : Service() {
         } catch (persistenceError: Exception) {
             Log.e(TAG, "CRITICAL: failed to durably finalize claim $eventId", persistenceError)
         }
+    }
+
+    private suspend fun sendDeltaChat(chatId: Int, text: String): Boolean {
+        return try {
+            (application as SmsNtfyApplication).deltaChatClient.sendText(chatId, text)
+        } catch (error: Exception) {
+            Log.e(TAG, "Delta Chat send failed", error)
+            false
+        } catch (error: LinkageError) {
+            Log.e(TAG, "Delta Chat core unavailable", error)
+            false
+        }
+    }
+
+    private fun formatTimestamp(timestamp: Long): String {
+        val formatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+        formatter.timeZone = TimeZone.getTimeZone("UTC")
+        return formatter.format(Date(timestamp))
     }
 
     private fun startCallListener() {

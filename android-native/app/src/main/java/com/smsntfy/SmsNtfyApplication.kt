@@ -4,6 +4,8 @@ import android.app.Application
 import android.util.Log
 import com.smsntfy.data.AppDatabase
 import com.smsntfy.data.Preferences
+import com.smsntfy.deltachat.DeltaChatClient
+import com.smsntfy.deltachat.NativeDeltaChatCore
 import com.smsntfy.network.NtfyClient
 import com.smsntfy.network.SseClient
 import kotlinx.coroutines.CoroutineScope
@@ -23,6 +25,17 @@ class SmsNtfyApplication : Application() {
     val database by lazy { AppDatabase.getDatabase(this) }
     val ntfyClient by lazy { NtfyClient(this) }
     val sseClient by lazy { SseClient(this) }
+    val deltaChatClient by lazy {
+        DeltaChatClient(
+            core = NativeDeltaChatCore(this),
+            loadAccountId = { preferences.deltaChatAccountId },
+            saveDestination = { accountId, chatId ->
+                check(preferences.saveDeltaChatDestination(accountId, chatId)) {
+                    "Delta Chat destination could not be saved"
+                }
+            }
+        )
+    }
 
     override fun onCreate() {
         super.onCreate()

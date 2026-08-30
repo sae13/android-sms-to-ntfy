@@ -10,6 +10,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.smsntfy.R
 import com.smsntfy.databinding.ActivitySettingsBinding
 import com.smsntfy.SmsNtfyApplication
+import com.smsntfy.deltachat.DeltaChatSetupResult
 
 class SettingsActivity : AppCompatActivity() {
 
@@ -45,6 +46,16 @@ class SettingsActivity : AppCompatActivity() {
 
         binding.btnSave.setOnClickListener { saveSettings() }
         binding.btnTestConnection.setOnClickListener { viewModel.testConnection() }
+        binding.btnSetupDeltaChat.setOnClickListener { setupDeltaChat() }
+        binding.btnTestDeltaChat.setOnClickListener {
+            viewModel.testDeltaChat { success ->
+                Toast.makeText(
+                    this,
+                    if (success) R.string.deltachat_test_sent else R.string.deltachat_test_failed,
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
     }
 
     private fun loadSettings() {
@@ -60,6 +71,7 @@ class SettingsActivity : AppCompatActivity() {
         binding.cbEnableCalls.isChecked = prefs.enableCalls
         binding.cbEnableSse.isChecked = prefs.enableSse
         binding.cbUseBase64.isChecked = prefs.useBase64
+        binding.cbEnableDeltaChat.isChecked = prefs.deltaChatEnabled
 
         binding.spinnerPriority.setSelection(prefs.ntfyPriority)
     }
@@ -78,8 +90,31 @@ class SettingsActivity : AppCompatActivity() {
         prefs.enableSse = binding.cbEnableSse.isChecked
         prefs.useBase64 = binding.cbUseBase64.isChecked
         prefs.ntfyPriority = binding.spinnerPriority.selectedItemPosition
+        prefs.deltaChatEnabled = binding.cbEnableDeltaChat.isChecked && prefs.deltaChatChatId > 0
 
         Toast.makeText(this, "Settings saved", Toast.LENGTH_SHORT).show()
         finish()
+    }
+
+    private fun setupDeltaChat() {
+        val loginCode = binding.etDeltaChatLogin.text?.toString().orEmpty()
+        val invite = binding.etDeltaChatInvite.text?.toString().orEmpty()
+        binding.btnSetupDeltaChat.isEnabled = false
+        viewModel.setupDeltaChat(loginCode, invite) { result ->
+            // The login payload must leave the view immediately after submission and is never persisted.
+            binding.etDeltaChatLogin.text?.clear()
+            binding.btnSetupDeltaChat.isEnabled = true
+            val message = when (result) {
+                is DeltaChatSetupResult.Ready -> {
+                    binding.cbEnableDeltaChat.isChecked = true
+                    R.string.deltachat_ready
+                }
+                DeltaChatSetupResult.InvalidLogin -> R.string.deltachat_invalid_login
+                DeltaChatSetupResult.InvalidInvite -> R.string.deltachat_invalid_invite
+                is DeltaChatSetupResult.Failed -> R.string.deltachat_setup_failed
+            }
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        }
+        binding.etDeltaChatLogin.text?.clear()
     }
 }
