@@ -13,19 +13,25 @@ class Preferences(context: Context) {
 
     private val prefs: SharedPreferences = PreferenceManager.getDefaultSharedPreferences(context)
 
+    init {
+        prefs.edit()
+            .remove("reply_topic")
+            .remove("enable_sse")
+            .remove("telegram_proxy")
+            .remove("last_sender")
+            .remove("last_contact")
+            .apply()
+    }
+
     companion object {
         const val KEY_NTFY_SERVER = "ntfy_server_url"
         const val KEY_NTFY_TOPIC = "ntfy_topic"
         const val KEY_NTFY_USERNAME = "ntfy_username"
         const val KEY_NTFY_PASSWORD = "ntfy_password"
-        const val KEY_REPLY_TOPIC = "reply_topic"
         const val KEY_ENABLE_SMS = "enable_sms"
         const val KEY_ENABLE_CALLS = "enable_calls"
-        const val KEY_ENABLE_SSE = "enable_sse"
         const val KEY_SERVICE_RUNNING = "service_running"
         const val KEY_INITIAL_PERMISSION_REQUESTED = "initial_permission_requested"
-        const val KEY_LAST_SENDER = "last_sender"
-        const val KEY_LAST_CONTACT = "last_contact"
         const val KEY_USE_BASE64 = "use_base64"
         const val KEY_PRIORITY = "ntfy_priority"
         const val KEY_DELTACHAT_ENABLED = "deltachat_enabled"
@@ -34,7 +40,11 @@ class Preferences(context: Context) {
         const val KEY_TELEGRAM_ENABLED = "telegram_enabled"
         const val KEY_TELEGRAM_BOT_TOKEN = "telegram_bot_token"
         const val KEY_TELEGRAM_CHAT_ID = "telegram_chat_id"
-        const val KEY_TELEGRAM_PROXY = "telegram_proxy"
+        const val KEY_AETHER_ENABLED = "aether_enabled"
+        const val KEY_AETHER_ALWAYS_ON = "aether_always_on"
+        const val KEY_AETHER_PUBLIC_PROXY = "aether_public_proxy"
+        const val KEY_AETHER_LAST_ROUTE = "aether_last_route"
+        const val KEY_AETHER_LAST_STATUS = "aether_last_status"
 
         // Deliberately no login-code key: credentials belong only in Delta Chat's private database.
     }
@@ -56,10 +66,6 @@ class Preferences(context: Context) {
         get() = prefs.getString(KEY_NTFY_PASSWORD, "") ?: ""
         set(value) = prefs.edit().putString(KEY_NTFY_PASSWORD, value).apply()
 
-    var replyTopic: String
-        get() = prefs.getString(KEY_REPLY_TOPIC, "sms-replies") ?: "sms-replies"
-        set(value) = prefs.edit().putString(KEY_REPLY_TOPIC, value).apply()
-
     var enableSms: Boolean
         get() = prefs.getBoolean(KEY_ENABLE_SMS, true)
         set(value) = prefs.edit().putBoolean(KEY_ENABLE_SMS, value).apply()
@@ -68,10 +74,6 @@ class Preferences(context: Context) {
         get() = prefs.getBoolean(KEY_ENABLE_CALLS, true)
         set(value) = prefs.edit().putBoolean(KEY_ENABLE_CALLS, value).apply()
 
-    var enableSse: Boolean
-        get() = prefs.getBoolean(KEY_ENABLE_SSE, true)
-        set(value) = prefs.edit().putBoolean(KEY_ENABLE_SSE, value).apply()
-
     var isServiceRunning: Boolean
         get() = prefs.getBoolean(KEY_SERVICE_RUNNING, false)
         set(value) = prefs.edit().putBoolean(KEY_SERVICE_RUNNING, value).apply()
@@ -79,14 +81,6 @@ class Preferences(context: Context) {
     var initialPermissionRequested: Boolean
         get() = prefs.getBoolean(KEY_INITIAL_PERMISSION_REQUESTED, false)
         set(value) = prefs.edit().putBoolean(KEY_INITIAL_PERMISSION_REQUESTED, value).apply()
-
-    var lastSender: String
-        get() = prefs.getString(KEY_LAST_SENDER, "") ?: ""
-        set(value) = prefs.edit().putString(KEY_LAST_SENDER, value).apply()
-
-    var lastContact: String
-        get() = prefs.getString(KEY_LAST_CONTACT, "") ?: ""
-        set(value) = prefs.edit().putString(KEY_LAST_CONTACT, value).apply()
 
     var useBase64: Boolean
         get() = prefs.getBoolean(KEY_USE_BASE64, true)
@@ -125,21 +119,41 @@ class Preferences(context: Context) {
         get() = prefs.getString(KEY_TELEGRAM_CHAT_ID, "") ?: ""
         set(value) = prefs.edit().putString(KEY_TELEGRAM_CHAT_ID, value).apply()
 
-    var telegramProxy: String
-        get() = prefs.getString(KEY_TELEGRAM_PROXY, "") ?: ""
-        set(value) = prefs.edit().putString(KEY_TELEGRAM_PROXY, value).apply()
+    var aetherEnabled: Boolean
+        get() = prefs.getBoolean(KEY_AETHER_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_AETHER_ENABLED, value).apply()
 
-    var telegramProxyUrl: String
-        get() = telegramProxy
-        set(value) { telegramProxy = value }
+    var aetherAlwaysOn: Boolean
+        get() = prefs.getBoolean(KEY_AETHER_ALWAYS_ON, false)
+        set(value) = prefs.edit().putBoolean(KEY_AETHER_ALWAYS_ON, value).apply()
 
-    fun saveTelegramSettings(enabled: Boolean, botToken: String, chatId: String, proxy: String): Boolean =
-        prefs.edit()
-            .putBoolean(KEY_TELEGRAM_ENABLED, enabled)
-            .putString(KEY_TELEGRAM_BOT_TOKEN, botToken)
-            .putString(KEY_TELEGRAM_CHAT_ID, chatId)
-            .putString(KEY_TELEGRAM_PROXY, proxy)
-            .commit()
+    var aetherPublicProxy: Boolean
+        get() = prefs.getBoolean(KEY_AETHER_PUBLIC_PROXY, false)
+        set(value) = prefs.edit().putBoolean(KEY_AETHER_PUBLIC_PROXY, value).apply()
+
+    var aetherLastRoute: String
+        get() = prefs.getString(KEY_AETHER_LAST_ROUTE, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_AETHER_LAST_ROUTE, value).apply()
+
+    var aetherLastStatus: String
+        get() = prefs.getString(KEY_AETHER_LAST_STATUS, "not-tested") ?: "not-tested"
+        set(value) = prefs.edit().putString(KEY_AETHER_LAST_STATUS, value).apply()
+
+    fun saveTelegramSettings(
+        enabled: Boolean,
+        botToken: String,
+        chatId: String,
+        aetherEnabled: Boolean,
+        aetherAlwaysOn: Boolean,
+        aetherPublicProxy: Boolean
+    ): Boolean = prefs.edit()
+        .putBoolean(KEY_TELEGRAM_ENABLED, enabled)
+        .putString(KEY_TELEGRAM_BOT_TOKEN, botToken)
+        .putString(KEY_TELEGRAM_CHAT_ID, chatId)
+        .putBoolean(KEY_AETHER_ENABLED, aetherEnabled)
+        .putBoolean(KEY_AETHER_ALWAYS_ON, aetherEnabled && aetherAlwaysOn)
+        .putBoolean(KEY_AETHER_PUBLIC_PROXY, aetherEnabled && aetherPublicProxy)
+        .commit()
 
     fun saveDeltaChatDestination(accountId: Int, chatId: Int): Boolean =
         prefs.edit()
@@ -154,14 +168,5 @@ class Preferences(context: Context) {
         val base = ntfyServer.trim().trimEnd('/')
         val topic = ntfyTopic.trim().trimStart('/')
         return "$base/$topic"
-    }
-
-    /**
-     * Returns the full ntfy SSE URL for receiving messages (reply topic).
-     */
-    fun getNtfySseUrl(): String {
-        val base = ntfyServer.trim().trimEnd('/')
-        val topic = replyTopic.trim().trimStart('/')
-        return "$base/$topic/sse"
     }
 }

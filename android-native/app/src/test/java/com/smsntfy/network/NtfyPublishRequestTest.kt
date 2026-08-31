@@ -8,7 +8,7 @@ import org.junit.Test
 class NtfyPublishRequestTest {
     @Test
     fun smsPublishUsesRawMultilineTextWithSafeMetadataHeaders() {
-        val body = NtfyPayloadFormatter.sms("042", "+98912", "علی", "time", "خط اول\nخط دوم")
+        val body = NtfyPayloadFormatter.sms( "+98912", "علی", "time", "خط اول\nخط دوم")
         val request = NtfyPublishRequest.build(
             url = "https://ntfy.example/topic",
             body = body,

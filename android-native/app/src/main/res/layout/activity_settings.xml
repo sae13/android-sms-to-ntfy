@@ -47,24 +47,6 @@
                 android:backgroundTint="@color/slate_800" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Reply Topic -->
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            android:hint="@string/reply_topic"
-            app:boxStrokeColor="@color/teal_200"
-            app:hintTextColor="@color/slate_400">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/etReplyTopic"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="text"
-                android:textColor="@color/white"
-                android:backgroundTint="@color/slate_800" />
-        </com.google.android.material.textfield.TextInputLayout>
-
         <!-- Username -->
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
@@ -118,7 +100,7 @@
             android:backgroundTint="@color/slate_800"
             android:spinnerMode="dropdown" />
 
-        <!-- Checkboxes -->
+        <!-- Forwarding switches -->
         <CheckBox
             android:id="@+id/cbEnableSms"
             android:layout_width="match_parent"
@@ -133,15 +115,6 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/enable_call_forwarding"
-            android:textColor="@color/white"
-            android:checked="true"
-            android:layout_marginBottom="8dp" />
-
-        <CheckBox
-            android:id="@+id/cbEnableSse"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/enable_sse_replies"
             android:textColor="@color/white"
             android:checked="true"
             android:layout_marginBottom="8dp" />
@@ -259,27 +232,53 @@
                 android:textColor="@color/white" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <com.google.android.material.textfield.TextInputLayout
+        <CheckBox
+            android:id="@+id/cbEnableAether"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:hint="@string/telegram_proxy">
+            android:text="@string/enable_aether"
+            android:textColor="@color/white"
+            android:layout_marginBottom="8dp" />
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/etTelegramProxy"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="textUri"
-                android:textColor="@color/white" />
-        </com.google.android.material.textfield.TextInputLayout>
+        <CheckBox
+            android:id="@+id/cbAetherAlwaysOn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/enable_aether_always"
+            android:textColor="@color/white"
+            android:layout_marginBottom="8dp" />
+
+        <CheckBox
+            android:id="@+id/cbAetherPublicProxy"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/enable_aether_public"
+            android:textColor="@color/white"
+            android:layout_marginBottom="4dp" />
 
         <TextView
+            android:id="@+id/tvAetherPublicWarning"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/aether_public_warning"
+            android:textColor="@android:color/holo_red_light"
+            android:textStyle="bold"
+            android:visibility="gone"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/tvAetherStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/slate_400"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/btnFindFastestAether"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="8dp"
-            android:text="@string/telegram_proxy_help"
-            android:textColor="@color/slate_400"
-            android:textSize="12sp" />
+            android:text="@string/find_fastest_aether" />
 
         <Button
             android:id="@+id/btnTestTelegram"

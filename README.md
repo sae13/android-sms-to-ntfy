@@ -4,7 +4,7 @@ A zero-Google SMS/call gateway for Android with a professional web dashboard.
 
 ## Download Android app
 
-[Download the latest installable native Android release](https://github.com/sae13/android-sms-to-ntfy/releases/latest/download/sms-ntfy-android-native-release.apk).
+[Download the latest installable native Android release](https://github.com/sae13/android-sms-to-ntfy/releases/latest). Choose the APK matching your device ABI (`arm64-v8a` for most current phones, otherwise `armeabi-v7a`).
 
 ## Modules
 
@@ -18,9 +18,9 @@ A zero-Google SMS/call gateway for Android with a professional web dashboard.
 - Incoming and missed-call alerting.
 - Persistent foreground service.
 - Raw HTTP POST to ntfy.
-- SSE reply listener.
-- Remote SMS reply through Android `SmsManager`.
-- No Firebase, no Google Play Services, LAN/self-hosted ntfy compatible.
+- Send-only Telegram forwarding, optionally through the built-in Aether proxy.
+- No reply listener, remote SMS reply, Firebase, or Google Play Services.
+- LAN/self-hosted ntfy compatible.
 
 ## Build
 

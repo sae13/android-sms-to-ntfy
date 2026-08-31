@@ -71,7 +71,7 @@
                         android:id="@+id/tvConnectionStatus"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="SSE: Disconnected"
+                        android:text="Aether: not-tested"
                         android:textSize="14sp"
                         android:textColor="@color/slate_400"
                         android:layout_gravity="center_horizontal"

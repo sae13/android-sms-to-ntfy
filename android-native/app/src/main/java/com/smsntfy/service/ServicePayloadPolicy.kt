@@ -54,8 +54,7 @@ object ServiceStartPolicy {
         SmsForwardingService.ACTION_START_SERVICE,
         SmsForwardingService.ACTION_PROCESS_SMS,
         SmsForwardingService.ACTION_PROCESS_CALL,
-        SmsForwardingService.ACTION_STOP_SERVICE,
-        SmsForwardingService.ACTION_SEND_REPLY
+        SmsForwardingService.ACTION_STOP_SERVICE
     )
 
     fun isKnown(action: String): Boolean = action in knownActions
@@ -82,8 +81,6 @@ object ServiceStartPolicy {
         if (isPersistent) SmsForwardingService.ACTION_START_SERVICE else null
 
     fun shouldStopAfterEvent(isPersistent: Boolean): Boolean = !isPersistent
-
-    fun shouldStopAfterReply(isPersistent: Boolean): Boolean = !isPersistent
 
     fun startIdToStopAfterOneShot(isPersistent: Boolean, startId: Int): Int? =
         if (isPersistent) null else startId

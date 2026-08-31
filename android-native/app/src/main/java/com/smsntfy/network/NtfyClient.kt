@@ -36,7 +36,6 @@ class NtfyClient(context: Context) {
         sender: String,
         contact: String,
         message: String,
-        replyId: String,
         timestamp: Long = System.currentTimeMillis()
     ): Boolean {
         return withContext(Dispatchers.IO) {
@@ -49,7 +48,7 @@ class NtfyClient(context: Context) {
 
                 val request = buildRequest(
                     body = NtfyPayloadFormatter.sms(
-                        replyId, sender, contact, NtfyPayloadFormatter.timestamp(timestamp), message
+                        sender, contact, NtfyPayloadFormatter.timestamp(timestamp), message
                     ),
                     metadata = NtfyPublishMetadata(
                         title = title,

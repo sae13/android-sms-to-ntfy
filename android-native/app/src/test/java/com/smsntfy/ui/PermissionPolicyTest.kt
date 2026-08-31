@@ -38,7 +38,6 @@ class PermissionPolicyTest {
         assertEquals(
             listOf(
                 Manifest.permission.RECEIVE_SMS,
-                Manifest.permission.SEND_SMS,
                 Manifest.permission.READ_PHONE_STATE,
                 Manifest.permission.READ_CALL_LOG,
                 Manifest.permission.READ_CONTACTS

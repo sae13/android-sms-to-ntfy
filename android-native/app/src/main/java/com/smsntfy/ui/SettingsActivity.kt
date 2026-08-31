@@ -53,6 +53,13 @@ class SettingsActivity : AppCompatActivity() {
 
         binding.btnSave.setOnClickListener { saveSettings() }
         binding.btnTestConnection.setOnClickListener { viewModel.testConnection() }
+        binding.cbEnableAether.setOnCheckedChangeListener { _, checked ->
+            updateAetherControls(checked)
+        }
+        binding.cbAetherPublicProxy.setOnCheckedChangeListener { _, _ ->
+            updateAetherControls(binding.cbEnableAether.isChecked)
+        }
+        binding.btnFindFastestAether.setOnClickListener { findFastestAetherRoute() }
         binding.btnSetupDeltaChat.setOnClickListener { setupDeltaChat() }
         binding.btnTestDeltaChat.setOnClickListener {
             viewModel.testDeltaChat { result ->
@@ -67,7 +74,11 @@ class SettingsActivity : AppCompatActivity() {
         binding.btnTestTelegram.setOnClickListener {
             when (val validation = telegramSettingsValidation(requestedEnabled = true)) {
                 is TelegramSettingsValidation.Invalid -> showTelegramValidationError(validation.field)
-                is TelegramSettingsValidation.Valid -> viewModel.testTelegram(validation.config) { success ->
+                is TelegramSettingsValidation.Valid -> viewModel.testTelegram(
+                    config = validation.config,
+                    useAether = binding.cbEnableAether.isChecked,
+                    publicProxy = binding.cbAetherPublicProxy.isChecked
+                ) { success ->
                     Toast.makeText(
                         this,
                         getString(if (success) R.string.telegram_test_sent else R.string.telegram_test_failed),
@@ -86,18 +97,69 @@ class SettingsActivity : AppCompatActivity() {
         binding.etTopic.setText(prefs.ntfyTopic)
         binding.etUsername.setText(prefs.ntfyUsername)
         binding.etPassword.setText(prefs.ntfyPassword)
-        binding.etReplyTopic.setText(prefs.replyTopic)
         binding.cbEnableSms.isChecked = prefs.enableSms
         binding.cbEnableCalls.isChecked = prefs.enableCalls
-        binding.cbEnableSse.isChecked = prefs.enableSse
         binding.cbUseBase64.isChecked = prefs.useBase64
         binding.cbEnableDeltaChat.isChecked = prefs.deltaChatEnabled
         binding.cbEnableTelegram.isChecked = prefs.telegramEnabled
         binding.etTelegramBotToken.setText(prefs.telegramBotToken)
         binding.etTelegramChatId.setText(prefs.telegramChatId)
-        binding.etTelegramProxy.setText(prefs.telegramProxy)
+        binding.cbEnableAether.isChecked = prefs.aetherEnabled
+        binding.cbAetherAlwaysOn.isChecked = prefs.aetherAlwaysOn
+        binding.cbAetherPublicProxy.isChecked = prefs.aetherPublicProxy
+        updateAetherControls(prefs.aetherEnabled)
+        binding.tvAetherStatus.text = "Aether: ${prefs.aetherLastStatus}"
 
         binding.spinnerPriority.setSelection(prefs.ntfyPriority)
+    }
+
+    private fun updateAetherControls(enabled: Boolean) {
+        binding.cbAetherAlwaysOn.isEnabled = enabled
+        binding.cbAetherPublicProxy.isEnabled = enabled
+        binding.btnFindFastestAether.isEnabled = enabled
+        binding.tvAetherPublicWarning.visibility = if (enabled && binding.cbAetherPublicProxy.isChecked) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+    }
+
+    private fun findFastestAetherRoute() {
+        when (val validation = telegramSettingsValidation(requestedEnabled = true)) {
+            is TelegramSettingsValidation.Invalid -> showTelegramValidationError(validation.field)
+            is TelegramSettingsValidation.Valid -> {
+                binding.btnFindFastestAether.isEnabled = false
+                binding.btnTestTelegram.isEnabled = false
+                viewModel.findFastestAetherRoute(
+                    botToken = validation.config.botToken,
+                    publicProxy = binding.cbAetherPublicProxy.isChecked,
+                    onAttempt = { route, stage ->
+                        runOnUiThread {
+                            binding.tvAetherStatus.text = when (stage) {
+                                com.smsntfy.aether.AetherRouteAttemptStage.STARTING ->
+                                    getString(R.string.aether_search_starting, route.id)
+                                com.smsntfy.aether.AetherRouteAttemptStage.VERIFYING ->
+                                    getString(R.string.aether_search_verifying, route.id)
+                                com.smsntfy.aether.AetherRouteAttemptStage.FAILED ->
+                                    getString(R.string.aether_search_failed_route, route.id)
+                                com.smsntfy.aether.AetherRouteAttemptStage.VERIFIED ->
+                                    getString(R.string.aether_search_found, route.id)
+                            }
+                        }
+                    }
+                ) { route ->
+                    binding.btnFindFastestAether.isEnabled = binding.cbEnableAether.isChecked
+                    binding.btnTestTelegram.isEnabled = true
+                    val message = if (route != null) {
+                        getString(R.string.aether_search_found, route.id)
+                    } else {
+                        getString(R.string.aether_search_failed)
+                    }
+                    binding.tvAetherStatus.text = message
+                    Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
     private fun saveSettings() {
@@ -116,7 +178,9 @@ class SettingsActivity : AppCompatActivity() {
                 telegramConfig.enabled,
                 telegramConfig.botToken,
                 telegramConfig.chatId,
-                telegramConfig.proxy
+                binding.cbEnableAether.isChecked,
+                binding.cbAetherAlwaysOn.isChecked,
+                binding.cbAetherPublicProxy.isChecked
             )
         ) {
             Toast.makeText(this, R.string.telegram_settings_save_failed, Toast.LENGTH_LONG).show()
@@ -127,10 +191,8 @@ class SettingsActivity : AppCompatActivity() {
         prefs.ntfyTopic = binding.etTopic.text.toString().trim()
         prefs.ntfyUsername = binding.etUsername.text.toString().trim()
         prefs.ntfyPassword = binding.etPassword.text.toString().trim()
-        prefs.replyTopic = binding.etReplyTopic.text.toString().trim()
         prefs.enableSms = binding.cbEnableSms.isChecked
         prefs.enableCalls = binding.cbEnableCalls.isChecked
-        prefs.enableSse = binding.cbEnableSse.isChecked
         prefs.useBase64 = binding.cbUseBase64.isChecked
         prefs.ntfyPriority = binding.spinnerPriority.selectedItemPosition
         prefs.deltaChatEnabled = binding.cbEnableDeltaChat.isChecked && prefs.deltaChatChatId > 0
@@ -154,15 +216,13 @@ class SettingsActivity : AppCompatActivity() {
         TelegramSettingsPolicy.validate(
             requestedEnabled = requestedEnabled,
             botToken = binding.etTelegramBotToken.text?.toString().orEmpty(),
-            chatId = binding.etTelegramChatId.text?.toString().orEmpty(),
-            proxy = binding.etTelegramProxy.text?.toString().orEmpty()
+            chatId = binding.etTelegramChatId.text?.toString().orEmpty()
         )
 
     private fun showTelegramValidationError(field: TelegramSettingsField) {
         val message = when (field) {
             TelegramSettingsField.BOT_TOKEN -> R.string.telegram_invalid_token
             TelegramSettingsField.CHAT_ID -> R.string.telegram_invalid_chat_id
-            TelegramSettingsField.PROXY -> R.string.telegram_invalid_proxy
         }
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }

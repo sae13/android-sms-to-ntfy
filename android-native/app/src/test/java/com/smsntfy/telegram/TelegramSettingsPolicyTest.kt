@@ -11,8 +11,7 @@ class TelegramSettingsPolicyTest {
         val result = TelegramSettingsPolicy.validate(
             requestedEnabled = true,
             botToken = " 123456:ABCDEFGHIJKLMNOPQRSTUVWXYZabcd ",
-            chatId = " -1001234567890 ",
-            proxy = "  "
+            chatId = " -1001234567890 "
         )
 
         assertTrue(result is TelegramSettingsValidation.Valid)
@@ -20,7 +19,6 @@ class TelegramSettingsPolicyTest {
         assertTrue(result.config.enabled)
         assertEquals("123456:ABCDEFGHIJKLMNOPQRSTUVWXYZabcd", result.config.botToken)
         assertEquals("-1001234567890", result.config.chatId)
-        assertEquals("", result.config.proxy)
     }
 
     @Test
@@ -28,8 +26,7 @@ class TelegramSettingsPolicyTest {
         val result = TelegramSettingsPolicy.validate(
             requestedEnabled = true,
             botToken = "bad",
-            chatId = "-1001234567890",
-            proxy = ""
+            chatId = "-1001234567890"
         )
 
         assertTrue(result is TelegramSettingsValidation.Invalid)
@@ -38,7 +35,7 @@ class TelegramSettingsPolicyTest {
 
     @Test
     fun disabledSettingsMayBeSavedWithoutCredentials() {
-        val result = TelegramSettingsPolicy.validate(false, "", "", "")
+        val result = TelegramSettingsPolicy.validate(false, "", "")
 
         assertTrue(result is TelegramSettingsValidation.Valid)
         assertFalse((result as TelegramSettingsValidation.Valid).config.enabled)

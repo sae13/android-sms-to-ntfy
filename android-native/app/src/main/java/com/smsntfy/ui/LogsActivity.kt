@@ -91,7 +91,6 @@ class LogsActivity : AppCompatActivity() {
                 val color = when (event.type) {
                     "sms" -> android.graphics.Color.parseColor("#22D3EE") // cyan
                     "call" -> android.graphics.Color.parseColor("#F472B6") // pink
-                    "sse" -> android.graphics.Color.parseColor("#A5F3FC") // light cyan
                     "sent" -> android.graphics.Color.parseColor("#4ADE80") // green
                     "error" -> android.graphics.Color.parseColor("#F87171") // red
                     else -> android.graphics.Color.parseColor("#94A3B8") // slate

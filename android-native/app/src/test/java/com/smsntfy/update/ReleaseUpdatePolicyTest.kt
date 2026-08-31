@@ -79,6 +79,73 @@ class ReleaseUpdatePolicyTest {
     }
 
     @Test
+    fun githubReleasePayloadSelectsApkMatchingPreferredAbi() {
+        val json = """
+            {
+              "tag_name": "android-native-abc123",
+              "name": "Android Native 1.4.0",
+              "target_commitish": "abc123",
+              "html_url": "https://github.com/sae13/android-sms-to-ntfy/releases/tag/android-native-abc123",
+              "body": "versionCode: 14",
+              "draft": false,
+              "prerelease": false,
+              "assets": [
+                {
+                  "name": "sms-ntfy-android-native-arm64-v8a.apk",
+                  "browser_download_url": "https://github.com/sae13/android-sms-to-ntfy/releases/download/android-native-abc123/sms-ntfy-android-native-arm64-v8a.apk"
+                },
+                {
+                  "name": "sms-ntfy-android-native-armeabi-v7a.apk",
+                  "browser_download_url": "https://github.com/sae13/android-sms-to-ntfy/releases/download/android-native-abc123/sms-ntfy-android-native-armeabi-v7a.apk"
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val release = GitHubReleaseParser.parse(json, preferredAbis = listOf("armeabi-v7a"))
+
+        assertEquals(
+            "https://github.com/sae13/android-sms-to-ntfy/releases/download/android-native-abc123/sms-ntfy-android-native-armeabi-v7a.apk",
+            release?.apkDownloadUrl
+        )
+    }
+
+    @Test
+    fun githubReleasePayloadUsesFirstSupportedAbiPreference() {
+        val json = """
+            {
+              "tag_name": "android-native-abc123",
+              "name": "Android Native 1.4.0",
+              "target_commitish": "abc123",
+              "html_url": "https://github.com/sae13/android-sms-to-ntfy/releases/tag/android-native-abc123",
+              "body": "versionCode: 14",
+              "draft": false,
+              "prerelease": false,
+              "assets": [
+                {
+                  "name": "sms-ntfy-android-native-armeabi-v7a.apk",
+                  "browser_download_url": "https://github.com/sae13/android-sms-to-ntfy/releases/download/android-native-abc123/sms-ntfy-android-native-armeabi-v7a.apk"
+                },
+                {
+                  "name": "sms-ntfy-android-native-arm64-v8a.apk",
+                  "browser_download_url": "https://github.com/sae13/android-sms-to-ntfy/releases/download/android-native-abc123/sms-ntfy-android-native-arm64-v8a.apk"
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val release = GitHubReleaseParser.parse(
+            json,
+            preferredAbis = listOf("arm64-v8a", "armeabi-v7a")
+        )
+
+        assertEquals(
+            "https://github.com/sae13/android-sms-to-ntfy/releases/download/android-native-abc123/sms-ntfy-android-native-arm64-v8a.apk",
+            release?.apkDownloadUrl
+        )
+    }
+
+    @Test
     fun draftPrereleaseOrMissingVersionMetadataIsIgnored() {
         val draft = """{"tag_name":"v2","name":"2.0","html_url":"https://example.com","body":"versionCode: 2","draft":true,"prerelease":false,"assets":[]}"""
         val prerelease = """{"tag_name":"v2","name":"2.0","html_url":"https://example.com","body":"versionCode: 2","draft":false,"prerelease":true,"assets":[]}"""

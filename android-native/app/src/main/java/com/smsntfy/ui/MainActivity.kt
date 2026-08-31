@@ -16,7 +16,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.smsntfy.R
-import com.smsntfy.network.SseClient
 import com.smsntfy.service.SmsForwardingService
 import com.smsntfy.update.ReleaseUpdateChecker
 import kotlinx.coroutines.flow.collect
@@ -135,12 +134,7 @@ class MainActivity : AppCompatActivity() {
         tvStatus.text = if (state.isServiceRunning) "Service Running" else "Service Stopped"
         tvStatus.setTextColor(if (state.isServiceRunning) getColor(android.R.color.holo_green_dark) else getColor(android.R.color.holo_red_dark))
 
-        tvConnectionStatus.text = when (state.connectionState) {
-            SseClient.ConnectionState.Connected -> "SSE: Connected"
-            SseClient.ConnectionState.Connecting -> "SSE: Connecting..."
-            SseClient.ConnectionState.Disconnected -> "SSE: Disconnected"
-            is SseClient.ConnectionState.Error -> "SSE: Error - ${state.connectionState.message}"
-        }
+        tvConnectionStatus.text = "Aether: ${state.aetherStatus}"
 
         state.lastEvent?.let { event ->
             tvLastEvent.text = "${event.type.toUpperCase()}: ${event.title} - ${event.message.take(80)}"

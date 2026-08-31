@@ -5,6 +5,8 @@ build/
 **/build/
 local.properties
 **/local.properties
+android-native/.aether-src/
+android-native/app/src/main/jniLibs/*/libaether.so
 captures/
 .externalNativeBuild/
 .cxx/

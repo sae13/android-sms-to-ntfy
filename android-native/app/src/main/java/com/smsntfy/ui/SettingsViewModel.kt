@@ -64,14 +64,52 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun testTelegram(config: com.smsntfy.telegram.TelegramConfig, onComplete: (Boolean) -> Unit) {
+    fun findFastestAetherRoute(
+        botToken: String,
+        publicProxy: Boolean,
+        onAttempt: (com.smsntfy.aether.AetherRoute, com.smsntfy.aether.AetherRouteAttemptStage) -> Unit,
+        onComplete: (com.smsntfy.aether.AetherRoute?) -> Unit
+    ) {
         viewModelScope.launch {
+            val selected = try {
+                app.aetherSessionManager.findFastestRoute(
+                    botToken = botToken,
+                    publicProxy = publicProxy,
+                    onAttempt = onAttempt
+                )
+            } catch (_: Exception) {
+                null
+            } catch (_: LinkageError) {
+                null
+            }
+            onComplete(selected)
+        }
+    }
+
+    fun testTelegram(
+        config: com.smsntfy.telegram.TelegramConfig,
+        useAether: Boolean,
+        publicProxy: Boolean,
+        onComplete: (Boolean) -> Unit
+    ) {
+        viewModelScope.launch {
+            var session: com.smsntfy.aether.AetherSessionManager.Session? = null
             val success = try {
-                com.smsntfy.telegram.TelegramBotClient { config }.testConnection()
+                val proxyPort = if (useAether) {
+                    session = app.aetherSessionManager.acquire(
+                        config.botToken,
+                        keepAlive = false,
+                        publicProxy = publicProxy
+                    )
+                    session.port
+                } else null
+                com.smsntfy.telegram.TelegramBotClient({ config }, { proxyPort }).testConnection()
             } catch (_: Exception) {
                 false
             } catch (_: LinkageError) {
                 false
+            } finally {
+                session?.close()
             }
             onComplete(success)
         }

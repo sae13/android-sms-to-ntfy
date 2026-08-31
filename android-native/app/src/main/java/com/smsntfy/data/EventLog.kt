@@ -6,7 +6,7 @@ import androidx.room.TypeConverters
 import java.util.Date
 
 /**
- * Represents an event log entry (SMS received, call received, SSE message, SMS sent, errors).
+ * Represents an event log entry for received and forwarded events or errors.
  */
 @Entity(tableName = "event_logs")
 @TypeConverters(Converters::class)
@@ -14,7 +14,7 @@ data class EventLog(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
 
-    val type: String,           // "sms", "call", "sse", "sent", "error"
+    val type: String,           // "sms", "call", "sent", "error"
     val title: String,          // Short title
     val message: String,        // Full message body
     val sender: String = "",    // Phone number or sender

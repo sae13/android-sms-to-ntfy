@@ -17,6 +17,8 @@ val releaseVersionCode = providers.environmentVariable("ANDROID_VERSION_CODE")
     .orElse(1)
 val releaseVersionName = providers.environmentVariable("ANDROID_VERSION_NAME")
     .orElse("1.0.0")
+val releaseAbi = providers.environmentVariable("ANDROID_RELEASE_ABI")
+    .orElse("")
 
 plugins {
     id("com.android.application")
@@ -31,12 +33,15 @@ android {
 
     defaultConfig {
         applicationId = "com.smsntfy"
-        minSdk = 21
+        minSdk = 24
         targetSdk = 35
         versionCode = releaseVersionCode.get()
         versionName = releaseVersionName.get()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
+        if (releaseAbi.get().isNotBlank()) {
+            ndk.abiFilters += releaseAbi.get()
+        }
     }
 
     signingConfigs {
@@ -72,12 +77,21 @@ android {
         jvmTarget = "1.8"
     }
 
+    kapt {
+        arguments {
+            arg("room.schemaLocation", "$projectDir/schemas")
+        }
+    }
+
     buildFeatures {
         buildConfig = true
         viewBinding = true
     }
 
     packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
         resources {
             excludes.add("META-INF/*.kotlin_module")
         }
@@ -114,8 +128,6 @@ dependencies {
     
     // HTTP Client (OkHttp)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
-    implementation("com.squareup.okhttp3:okhttp-sse:4.12.0")
     
     // Official Delta Chat JSON-RPC Java binding
     implementation("com.fasterxml.jackson.core:jackson-databind:2.11.1")
@@ -125,16 +137,10 @@ dependencies {
     implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
     implementation("com.squareup.moshi:moshi-adapters:1.15.1")
     
-    // Preferences DataStore
-    implementation("androidx.datastore:datastore-preferences:1.1.2")
-    
     // Room (for logging/events)
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
     kapt("androidx.room:room-compiler:2.6.1")
-    
-    // WorkManager (for periodic tasks)
-    implementation("androidx.work:work-runtime-ktx:2.9.0")
     
     // Testing
     testImplementation("junit:junit:4.13.2")

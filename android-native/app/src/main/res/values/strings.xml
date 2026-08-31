@@ -25,11 +25,8 @@
     <string name="ntfy_topic_hint">sms-alerts</string>
     <string name="ntfy_username">Username (optional)</string>
     <string name="ntfy_password">Password (optional)</string>
-    <string name="reply_topic">Reply Topic</string>
-    <string name="reply_topic_hint">sms-replies</string>
     <string name="enable_sms_forwarding">Enable SMS Forwarding</string>
     <string name="enable_call_forwarding">Enable Call Forwarding</string>
-    <string name="enable_sse_replies">Enable SSE Replies</string>
     <string name="battery_optimization_warning">Disable battery optimization for reliable service</string>
     <string name="open_battery_settings">Open Battery Settings</string>
     <string name="test_connection">Test Connection</string>
@@ -47,11 +44,19 @@
     <string name="deltachat_test_sent">Delta Chat test message queued</string>
     <string name="deltachat_test_failed">Delta Chat test message failed</string>
     <string name="telegram_destination">Telegram destination</string>
-    <string name="enable_telegram">Enable Telegram forwarding and replies</string>
+    <string name="enable_telegram">Enable send-only Telegram forwarding</string>
     <string name="telegram_bot_token">Telegram bot token</string>
     <string name="telegram_chat_id">Telegram chat or group ID</string>
-    <string name="telegram_proxy">Telegram proxy (optional)</string>
-    <string name="telegram_proxy_help">SOCKS5: socks5://host:port. MTProto links require a local SOCKS bridge, for example &amp;socks=127.0.0.1:1080.</string>
+    <string name="enable_aether">Route Telegram through built-in Aether</string>
+    <string name="enable_aether_always">Keep Aether active while the service runs</string>
+    <string name="enable_aether_public">Public proxy (LAN-facing SOCKS5 :1819 and HTTP CONNECT :1820)</string>
+    <string name="aether_public_warning">Security warning: public proxy exposes unauthenticated SOCKS5 and HTTP CONNECT listeners on all interfaces. Anyone who can reach this device can use your tunnel.</string>
+    <string name="find_fastest_aether">Find first working Aether protocol</string>
+    <string name="aether_search_starting">Testing %1$s…</string>
+    <string name="aether_search_verifying">Verifying Telegram through %1$s…</string>
+    <string name="aether_search_failed_route">%1$s failed; trying next protocol…</string>
+    <string name="aether_search_found">Aether protocol saved: %1$s</string>
+    <string name="aether_search_failed">No working Aether protocol was found</string>
     <string name="test_telegram">Test Telegram connection</string>
     <string name="telegram_test_sent">Telegram connection succeeded</string>
     <string name="telegram_test_failed">Telegram connection failed</string>
@@ -72,10 +77,6 @@
     <string name="log_sms_forwarded">SMS Forwarded</string>
     <string name="log_call_received">Call Received</string>
     <string name="log_call_forwarded">Call Forwarded</string>
-    <string name="log_sse_connected">SSE Connected</string>
-    <string name="log_sse_disconnected">SSE Disconnected</string>
-    <string name="log_sse_message">SSE Message Received</string>
-    <string name="log_sms_sent">Reply SMS Sent</string>
     <string name="log_error">Error</string>
     
     <!-- UI -->

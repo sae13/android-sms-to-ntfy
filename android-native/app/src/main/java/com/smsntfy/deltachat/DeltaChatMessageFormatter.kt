@@ -5,13 +5,11 @@ object DeltaChatMessageFormatter {
         sender: String,
         contact: String,
         message: String,
-        replyId: String,
         timestamp: String
     ): String = buildString {
         append("SMS\n")
         append("From: ${scalar(contact)} <${scalar(sender)}>\n")
-        append("Time: ${scalar(timestamp)}\n")
-        append("Reply ID: ${scalar(replyId)}\n\n")
+        append("Time: ${scalar(timestamp)}\n\n")
         append(body(message))
     }
 

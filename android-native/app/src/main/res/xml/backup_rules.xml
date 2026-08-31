@@ -3,6 +3,6 @@
     <exclude domain="file" path="deltachat-accounts/" />
     <!-- Shared preferences contain bot tokens, ntfy credentials, and proxy secrets. -->
     <exclude domain="sharedpref" path="." />
-    <!-- Telegram phone mappings and polling offsets are device-local state. -->
+    <!-- Event history is device-local state. -->
     <exclude domain="database" path="sms_ntfy_db" />
 </full-backup-content>

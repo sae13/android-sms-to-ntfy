@@ -244,12 +244,6 @@ class ServicePayloadPolicyTest {
     }
 
     @Test
-    fun replyCompletionUsesSameOneShotLifecyclePolicy() {
-        assertTrue(ServiceStartPolicy.shouldStopAfterReply(isPersistent = false))
-        assertFalse(ServiceStartPolicy.shouldStopAfterReply(isPersistent = true))
-    }
-
-    @Test
     fun unknownActionsAreRejectedWithoutProcessing() {
         assertFalse(ServiceStartPolicy.isKnown("UNKNOWN"))
         assertTrue(ServiceStartPolicy.isKnown(SmsForwardingService.ACTION_PROCESS_SMS))

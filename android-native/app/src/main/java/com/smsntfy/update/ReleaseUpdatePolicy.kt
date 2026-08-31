@@ -76,6 +76,7 @@ object GitHubReleaseParser {
 
     fun parse(
         json: String,
+        preferredAbis: List<String> = emptyList(),
         commitVersionCode: (String) -> Int? = { null }
     ): ReleaseInfo? = runCatching {
         if (booleanField(json, "draft") || booleanField(json, "prerelease")) return null
@@ -95,16 +96,25 @@ object GitHubReleaseParser {
         )
         val htmlUrl = stringField(json, "html_url")?.takeIf(ReleaseUrlPolicy::isTrusted)
             ?: return null
-        val apkUrl = assetObjectPattern.findAll(json)
+        val apkAssets = assetObjectPattern.findAll(json)
             .map { match ->
                 match.groupValues[1].unescapeJson() to match.groupValues[2].unescapeJson()
             }
-            .firstOrNull { (name, url) ->
+            .filter { (name, url) ->
                 name.endsWith(".apk", ignoreCase = true) &&
                     runCatching { URI(url).path.endsWith(".apk", ignoreCase = true) }.getOrDefault(false) &&
                     ReleaseUrlPolicy.isTrusted(url)
             }
+            .toList()
+        val apkUrl = preferredAbis.asSequence()
+            .mapNotNull { abi ->
+                apkAssets.firstOrNull { (name, _) ->
+                    name.endsWith("-$abi.apk", ignoreCase = true)
+                }
+            }
+            .firstOrNull()
             ?.second
+            ?: apkAssets.singleOrNull()?.second
 
         ReleaseInfo(versionCode, versionLabel, htmlUrl, apkUrl)
     }.getOrNull()

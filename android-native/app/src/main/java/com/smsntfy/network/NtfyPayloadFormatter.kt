@@ -10,10 +10,9 @@ object NtfyPayloadFormatter {
         "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US
     ).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(epochMillis))
 
-    fun sms(id: String, sender: String, contact: String, time: String, message: String): String =
+    fun sms(sender: String, contact: String, time: String, message: String): String =
         listOf(
             "type: sms",
-            "id: ${quote(id)}",
             "from: ${quote(sender)}",
             "contact: ${quote(contact)}",
             "time: ${quote(time)}",

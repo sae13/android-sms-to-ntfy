@@ -39,9 +39,11 @@ class ReleaseUpdateChecker(
                 .build()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@use
-                val release = GitHubReleaseParser.parse(response.body?.string().orEmpty()) {
-                    targetCommitVersionCode(it)
-                }
+                val release = GitHubReleaseParser.parse(
+                    json = response.body?.string().orEmpty(),
+                    commitVersionCode = { targetCommitVersionCode(it) },
+                    preferredAbis = Build.SUPPORTED_ABIS?.toList().orEmpty()
+                )
                 val update = ReleaseUpdatePolicy.availableUpdate(currentVersionCode, release)
                     ?: return@use
                 val lastNotified = state.getInt(KEY_LAST_NOTIFIED_VERSION, 0)
