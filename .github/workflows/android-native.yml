@@ -189,6 +189,7 @@ jobs:
     permissions:
       contents: write
     env:
+      GH_REPO: ${{ github.repository }}
       RELEASE_TAG: android-native-${{ github.sha }}
     steps:
       - name: Download per-ABI APKs
