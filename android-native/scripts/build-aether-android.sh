@@ -13,6 +13,13 @@ AETHER_ABIS="${AETHER_ABIS:-arm64-v8a armeabi-v7a}"
 
 : "${ANDROID_NDK_HOME:?Set ANDROID_NDK_HOME to an Android NDK r26d installation}"
 test -d "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt"
+shopt -s nullglob
+ndk_clang_candidates=("$ANDROID_NDK_HOME"/toolchains/llvm/prebuilt/*/bin/clang)
+shopt -u nullglob
+if [[ "${#ndk_clang_candidates[@]}" -eq 0 ]] || [[ ! -x "${ndk_clang_candidates[0]}" ]]; then
+  echo "clang was not found in ANDROID_NDK_HOME" >&2
+  exit 1
+fi
 command -v git >/dev/null
 command -v cargo >/dev/null
 command -v rustup >/dev/null

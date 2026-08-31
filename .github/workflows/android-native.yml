@@ -53,7 +53,7 @@ jobs:
         uses: nttld/setup-ndk@aacaf74664d0f8e1b070a865acb47ee25007386d # v1.6.0
         with:
           ndk-version: r26d
-          local-cache: true
+          local-cache: false
 
       - name: Build pinned Aether core for supported Android ABIs
         env:
@@ -108,8 +108,8 @@ jobs:
       ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
       ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
       ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
-      ANDROID_VERSION_CODE: ${{ github.run_number }}
-      ANDROID_VERSION_NAME: 1.0.${{ github.run_number }}
+      ANDROID_VERSION_CODE: 18
+      ANDROID_VERSION_NAME: 1.0.18
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -134,7 +134,7 @@ jobs:
         uses: nttld/setup-ndk@aacaf74664d0f8e1b070a865acb47ee25007386d # v1.6.0
         with:
           ndk-version: r26d
-          local-cache: true
+          local-cache: false
 
       - name: Build pinned Aether core
         env:
@@ -208,13 +208,13 @@ jobs:
             gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
             gh release edit "$RELEASE_TAG" \
               --title "Android Native latest" \
-              --notes "Per-ABI Android releases from main commit $GITHUB_SHA. versionCode: $GITHUB_RUN_NUMBER" \
+              --notes "Per-ABI Android releases from main commit $GITHUB_SHA. versionCode: 18; versionName: 1.0.18" \
               --latest
           else
             gh release create "$RELEASE_TAG" "${assets[@]}" \
               --target "$GITHUB_SHA" \
               --title "Android Native latest" \
-              --notes "Per-ABI Android releases from main commit $GITHUB_SHA. versionCode: $GITHUB_RUN_NUMBER" \
+              --notes "Per-ABI Android releases from main commit $GITHUB_SHA. versionCode: 18; versionName: 1.0.18" \
               --latest
           fi
           test "$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')" = "false"
