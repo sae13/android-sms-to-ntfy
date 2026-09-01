@@ -14,9 +14,9 @@ val hasReleaseSigning = listOf(
 ).all { it.isPresent }
 val releaseVersionCode = providers.environmentVariable("ANDROID_VERSION_CODE")
     .map(String::toInt)
-    .orElse(1)
+    .orElse(18)
 val releaseVersionName = providers.environmentVariable("ANDROID_VERSION_NAME")
-    .orElse("1.0.0")
+    .orElse("1.0.18")
 val releaseAbi = providers.environmentVariable("ANDROID_RELEASE_ABI")
     .orElse("")
 
@@ -28,11 +28,11 @@ plugins {
 }
 
 android {
-    namespace = "com.smsntfy"
+    namespace = "com.saebm.smsntfy"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.smsntfy"
+        applicationId = "com.saebm.smsntfy"
         minSdk = 24
         targetSdk = 35
         versionCode = releaseVersionCode.get()
