@@ -2,7 +2,7 @@
 set -euo pipefail
 
 AETHER_REPOSITORY="https://github.com/CluvexStudio/Aether.git"
-AETHER_COMMIT="a916ff6fbbb4ebafe8314c53cf3718eb51dcae53"
+AETHER_COMMIT="${AETHER_COMMIT:-a916ff6fbbb4ebafe8314c53cf3718eb51dcae53}"
 RUST_TOOLCHAIN="1.88.0"
 CARGO_NDK_VERSION="4.1.2"
 ANDROID_PLATFORM="24"

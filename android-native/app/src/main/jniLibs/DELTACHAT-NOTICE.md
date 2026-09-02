@@ -5,7 +5,7 @@ This directory contains `libnative-utils.so` for `arm64-v8a` and `armeabi-v7a`, 
 - Core: https://github.com/deltachat/deltachat-core-rust/tree/v2.59.0
 - Android JNI bindings: https://github.com/deltachat/deltachat-android/tree/v2.59.0
 
-The native binaries and the minimal `com.b44t.messenger.DcContext` Java declaration are pinned to the same upstream release. Delta Chat core is licensed under MPL-2.0; see `DELTACHAT-LICENSE.txt` in this directory.
+The native binaries and the Java JSON-RPC/JNI bindings are pinned to the same upstream release. CI can rebuild both native binaries from another stable tag with `scripts/build-deltachat-android.sh`, and compatibility with the checked-in Java bindings is gated by the Android build and tests before a release is published. Delta Chat core is licensed under MPL-2.0; see `DELTACHAT-LICENSE.txt` in this directory.
 
 SHA-256:
 

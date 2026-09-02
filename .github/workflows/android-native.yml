@@ -15,6 +15,15 @@ on:
       - 'android-native/**'
       - '.github/workflows/android-native.yml'
   workflow_dispatch:
+    inputs:
+      aether_tag:
+        description: 'Optional stable CluvexStudio/Aether tag to validate and release'
+        required: false
+        type: string
+      deltachat_tag:
+        description: 'Optional stable deltachat/deltachat-android tag to validate and release'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -24,7 +33,74 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  resolve-aether:
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.resolve.outputs.commit }}
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Resolve pinned or requested Aether revision
+        id: resolve
+        env:
+          REQUESTED_AETHER_TAG: ${{ inputs.aether_tag }}
+        run: |
+          pinned_commit="$(sed -n 's/^AETHER_COMMIT="${AETHER_COMMIT:-\([0-9a-f]\{40\}\)}"$/\1/p' android-native/scripts/build-aether-android.sh)"
+          test -n "$pinned_commit"
+
+          if [[ -z "$REQUESTED_AETHER_TAG" ]]; then
+            printf 'commit=%s\n' "$pinned_commit" >> "$GITHUB_OUTPUT"
+            printf 'tag=%s\n' '' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          [[ "$REQUESTED_AETHER_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          release="$(curl --fail --silent --show-error \
+            --retry 3 \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/CluvexStudio/Aether/releases/tags/$REQUESTED_AETHER_TAG")"
+          test "$(jq -r '.draft' <<< "$release")" = "false"
+          test "$(jq -r '.prerelease' <<< "$release")" = "false"
+          commit="$(git ls-remote https://github.com/CluvexStudio/Aether.git "refs/tags/$REQUESTED_AETHER_TAG^{}" | cut -f1)"
+          if [[ -z "$commit" ]]; then
+            commit="$(git ls-remote https://github.com/CluvexStudio/Aether.git "refs/tags/$REQUESTED_AETHER_TAG" | cut -f1)"
+          fi
+          [[ "$commit" =~ ^[0-9a-f]{40}$ ]]
+          printf 'commit=%s\n' "$commit" >> "$GITHUB_OUTPUT"
+          printf 'tag=%s\n' "$REQUESTED_AETHER_TAG" >> "$GITHUB_OUTPUT"
+
+  resolve-deltachat:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Resolve pinned or requested Delta Chat release
+        id: resolve
+        env:
+          REQUESTED_DELTACHAT_TAG: ${{ inputs.deltachat_tag }}
+        run: |
+          pinned_tag="$(sed -n 's/^DELTACHAT_TAG="${DELTACHAT_TAG:-\(v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)}"$/\1/p' android-native/scripts/sync-deltachat-android.sh)"
+          test -n "$pinned_tag"
+
+          tag="${REQUESTED_DELTACHAT_TAG:-$pinned_tag}"
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          release="$(curl --fail --silent --show-error \
+            --retry 3 \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/deltachat/deltachat-android/releases/tags/$tag")"
+          test "$(jq -r '.draft' <<< "$release")" = "false"
+          test "$(jq -r '.prerelease' <<< "$release")" = "false"
+          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: [resolve-aether, resolve-deltachat]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -55,19 +131,51 @@ jobs:
           ndk-version: r26d
           local-cache: false
 
+      - name: Set up Android NDK r27
+        id: deltachat-ndk
+        uses: nttld/setup-ndk@aacaf74664d0f8e1b070a865acb47ee25007386d # v1.6.0
+        with:
+          ndk-version: 27.0.12077973
+          local-cache: false
+
+      - name: Sync Delta Chat Java bindings from pinned release
+        env:
+          DELTACHAT_TAG: ${{ needs.resolve-deltachat.outputs.tag }}
+        run: android-native/scripts/sync-deltachat-android.sh
+
       - name: Build pinned Aether core for supported Android ABIs
         env:
+          AETHER_COMMIT: ${{ needs.resolve-aether.outputs.commit }}
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
         run: android-native/scripts/build-aether-android.sh
 
       - name: Verify Aether binaries and notices
+        env:
+          AETHER_COMMIT: ${{ needs.resolve-aether.outputs.commit }}
         run: |
           for abi in arm64-v8a armeabi-v7a; do
             test -s "android-native/app/src/main/jniLibs/$abi/libaether.so"
           done
           test -s android-native/app/src/main/assets/aether/AGPL-3.0.txt
-          grep -q a916ff6fbbb4ebafe8314c53cf3718eb51dcae53 android-native/app/src/main/assets/aether/NOTICE.md
+          grep -Fq "$AETHER_COMMIT" android-native/app/src/main/assets/aether/NOTICE.md
+
+      - name: Build pinned Delta Chat core for supported Android ABIs and emulator
+        env:
+          DELTACHAT_SOURCE_DIR: ${{ github.workspace }}/android-native/.deltachat-src
+          ANDROID_NDK_HOME: ${{ steps.deltachat-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.deltachat-ndk.outputs.ndk-path }}
+        run: android-native/scripts/build-deltachat-android.sh
+
+      - name: Verify Delta Chat binaries
+        env:
+          DELTACHAT_TAG: ${{ needs.resolve-deltachat.outputs.tag }}
+        run: |
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            test -s "android-native/app/src/main/jniLibs/$abi/libnative-utils.so"
+            file "android-native/app/src/main/jniLibs/$abi/libnative-utils.so" | grep -Fq 'ELF'
+          done
+          grep -Fq "release **${DELTACHAT_TAG#v}**" android-native/app/src/main/jniLibs/DELTACHAT-NOTICE.md
 
       - name: Ensure Gradle wrapper is executable
         run: chmod +x android-native/gradlew
@@ -76,17 +184,28 @@ jobs:
         working-directory: android-native
         run: ./gradlew testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --console=plain
 
+      - name: Run Delta Chat JNI smoke test on an emulator
+        uses: ReactiveCircus/android-emulator-runner@1dcd0090116d15e7c562f8db72807de5e036a4ed # v2.38.0
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          working-directory: android-native
+          script: ./gradlew connectedDebugAndroidTest --no-daemon --console=plain -Pandroid.testInstrumentationRunnerArguments.class=com.saebm.smsntfy.deltachat.NativeDeltaChatSmokeInstrumentedTest
+
       - name: Verify debug APK contains Aether and notices
         run: |
           unzip -Z1 android-native/app/build/outputs/apk/debug/app-debug.apk > "$RUNNER_TEMP/debug-apk-entries.txt"
           for abi in arm64-v8a armeabi-v7a; do
             grep -Fx "lib/$abi/libaether.so" "$RUNNER_TEMP/debug-apk-entries.txt"
+            grep -Fx "lib/$abi/libnative-utils.so" "$RUNNER_TEMP/debug-apk-entries.txt"
           done
           grep -Fx 'assets/aether/AGPL-3.0.txt' "$RUNNER_TEMP/debug-apk-entries.txt"
 
   release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: build
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && (inputs.aether_tag != '' || inputs.deltachat_tag != ''))
+    needs: [resolve-aether, resolve-deltachat, build]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -100,11 +219,14 @@ jobs:
           - abi: armeabi-v7a
             asset: sms-ntfy-android-native-armeabi-v7a.apk
     env:
-      RELEASE_TAG: android-native-${{ github.sha }}
+      RELEASE_TAG: ${{ inputs.aether_tag != '' && inputs.deltachat_tag != '' && format('android-native-aether-{0}-deltachat-{1}', inputs.aether_tag, inputs.deltachat_tag) || inputs.aether_tag != '' && format('android-native-aether-{0}', inputs.aether_tag) || inputs.deltachat_tag != '' && format('android-native-deltachat-{0}', inputs.deltachat_tag) || format('android-native-{0}', github.sha) }}
       RELEASE_APK: android-native/app/build/outputs/apk/release/app-release.apk
       RELEASE_ASSET: ${{ matrix.asset }}
       ANDROID_RELEASE_ABI: ${{ matrix.abi }}
       AETHER_ABIS: ${{ matrix.abi }}
+      AETHER_COMMIT: ${{ needs.resolve-aether.outputs.commit }}
+      DELTACHAT_ABIS: ${{ matrix.abi }}
+      DELTACHAT_TAG: ${{ needs.resolve-deltachat.outputs.tag }}
       ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
       ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
       ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
@@ -142,6 +264,23 @@ jobs:
           ANDROID_NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
         run: android-native/scripts/build-aether-android.sh
 
+      - name: Set up Android NDK r27
+        id: deltachat-ndk
+        uses: nttld/setup-ndk@aacaf74664d0f8e1b070a865acb47ee25007386d # v1.6.0
+        with:
+          ndk-version: 27.0.12077973
+          local-cache: false
+
+      - name: Sync Delta Chat Java bindings from pinned release
+        run: android-native/scripts/sync-deltachat-android.sh
+
+      - name: Build pinned Delta Chat core
+        env:
+          DELTACHAT_SOURCE_DIR: ${{ github.workspace }}/android-native/.deltachat-src
+          ANDROID_NDK_HOME: ${{ steps.deltachat-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.deltachat-ndk.outputs.ndk-path }}
+        run: android-native/scripts/build-deltachat-android.sh
+
       - name: Restore stable release keystore
         env:
           ANDROID_RELEASE_KEYSTORE: ${{ runner.temp }}/android-release.jks
@@ -170,6 +309,8 @@ jobs:
           unzip -Z1 "$RELEASE_APK" > "$RUNNER_TEMP/release-apk-entries.txt"
           grep -Fx "lib/$ANDROID_RELEASE_ABI/libaether.so" "$RUNNER_TEMP/release-apk-entries.txt"
           test "$(grep -Ec '^lib/(arm64-v8a|armeabi-v7a)/libaether\.so$' "$RUNNER_TEMP/release-apk-entries.txt")" = "1"
+          grep -Fx "lib/$ANDROID_RELEASE_ABI/libnative-utils.so" "$RUNNER_TEMP/release-apk-entries.txt"
+          test "$(grep -Ec '^lib/(arm64-v8a|armeabi-v7a)/libnative-utils\.so$' "$RUNNER_TEMP/release-apk-entries.txt")" = "1"
           grep -Fx 'assets/aether/AGPL-3.0.txt' "$RUNNER_TEMP/release-apk-entries.txt"
           grep -Fx 'assets/aether/NOTICE.md' "$RUNNER_TEMP/release-apk-entries.txt"
           cp "$RELEASE_APK" "$RUNNER_TEMP/$RELEASE_ASSET"
@@ -183,14 +324,17 @@ jobs:
           retention-days: 7
 
   publish-release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: release
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && (inputs.aether_tag != '' || inputs.deltachat_tag != ''))
+    needs: [resolve-aether, resolve-deltachat, build, release]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
       GH_REPO: ${{ github.repository }}
-      RELEASE_TAG: android-native-${{ github.sha }}
+      RELEASE_TAG: ${{ inputs.aether_tag != '' && inputs.deltachat_tag != '' && format('android-native-aether-{0}-deltachat-{1}', inputs.aether_tag, inputs.deltachat_tag) || inputs.aether_tag != '' && format('android-native-aether-{0}', inputs.aether_tag) || inputs.deltachat_tag != '' && format('android-native-deltachat-{0}', inputs.deltachat_tag) || format('android-native-{0}', github.sha) }}
+      AETHER_TAG: ${{ needs.resolve-aether.outputs.tag }}
+      AETHER_COMMIT: ${{ needs.resolve-aether.outputs.commit }}
+      DELTACHAT_TAG: ${{ needs.resolve-deltachat.outputs.tag }}
     steps:
       - name: Download per-ABI APKs
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -205,17 +349,30 @@ jobs:
         run: |
           mapfile -t assets < <(find release-assets -maxdepth 1 -type f -name '*.apk' -print | sort)
           test "${#assets[@]}" = "2"
+          if [[ -n "$AETHER_TAG" && -n "${{ inputs.deltachat_tag }}" ]]; then
+            release_title="Android Native with Aether $AETHER_TAG and Delta Chat $DELTACHAT_TAG"
+            release_notes="Per-ABI Android releases from main commit $GITHUB_SHA with Aether $AETHER_TAG ($AETHER_COMMIT) and Delta Chat $DELTACHAT_TAG. versionCode: 18; versionName: 1.0.18"
+          elif [[ -n "$AETHER_TAG" ]]; then
+            release_title="Android Native with Aether $AETHER_TAG"
+            release_notes="Per-ABI Android releases from main commit $GITHUB_SHA with Aether $AETHER_TAG ($AETHER_COMMIT) and pinned Delta Chat $DELTACHAT_TAG. versionCode: 18; versionName: 1.0.18"
+          elif [[ -n "${{ inputs.deltachat_tag }}" ]]; then
+            release_title="Android Native with Delta Chat $DELTACHAT_TAG"
+            release_notes="Per-ABI Android releases from main commit $GITHUB_SHA with Delta Chat $DELTACHAT_TAG. versionCode: 18; versionName: 1.0.18"
+          else
+            release_title="Android Native latest"
+            release_notes="Per-ABI Android releases from main commit $GITHUB_SHA with pinned Delta Chat $DELTACHAT_TAG. versionCode: 18; versionName: 1.0.18"
+          fi
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
             gh release edit "$RELEASE_TAG" \
-              --title "Android Native latest" \
-              --notes "Per-ABI Android releases from main commit $GITHUB_SHA. versionCode: 18; versionName: 1.0.18" \
+              --title "$release_title" \
+              --notes "$release_notes" \
               --latest
           else
             gh release create "$RELEASE_TAG" "${assets[@]}" \
               --target "$GITHUB_SHA" \
-              --title "Android Native latest" \
-              --notes "Per-ABI Android releases from main commit $GITHUB_SHA. versionCode: 18; versionName: 1.0.18" \
+              --title "$release_title" \
+              --notes "$release_notes" \
               --latest
           fi
           test "$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')" = "false"
