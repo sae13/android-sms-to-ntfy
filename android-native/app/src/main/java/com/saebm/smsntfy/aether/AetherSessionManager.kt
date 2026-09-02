@@ -3,8 +3,11 @@ package com.saebm.smsntfy.aether
 import android.content.Context
 import android.util.Log
 import com.saebm.smsntfy.data.Preferences
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
@@ -89,16 +92,20 @@ object TelegramAetherSocksClient {
     }
 }
 
-class TelegramAetherProbe : AetherProbe {
-    override suspend fun verifyTelegram(port: Int, botToken: String): Boolean {
-        val result = runCatching {
-            TelegramAetherSocksClient.getMe(port, botToken)
+class TelegramAetherProbe(
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val socksRequest: (Int, String) -> Boolean = TelegramAetherSocksClient::getMe
+) : AetherProbe {
+    override suspend fun verifyTelegram(port: Int, botToken: String): Boolean =
+        withContext(ioDispatcher) {
+            val result = runCatching {
+                socksRequest(port, botToken)
+            }
+            result.exceptionOrNull()?.let { error ->
+                Log.w(TAG, "Telegram data-plane probe failed: ${error.javaClass.simpleName}")
+            }
+            result.getOrDefault(false)
         }
-        result.exceptionOrNull()?.let { error ->
-            Log.w(TAG, "Telegram data-plane probe failed: ${error.javaClass.simpleName}")
-        }
-        return result.getOrDefault(false)
-    }
 
     private companion object {
         const val TAG = "SmsNtfyAether"
