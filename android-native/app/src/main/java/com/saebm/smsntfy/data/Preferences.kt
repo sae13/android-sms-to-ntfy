@@ -30,6 +30,7 @@ class Preferences(context: Context) {
         const val KEY_NTFY_PASSWORD = "ntfy_password"
         const val KEY_ENABLE_SMS = "enable_sms"
         const val KEY_ENABLE_CALLS = "enable_calls"
+        const val KEY_CALL_NOTIFICATIONS_ENABLED = "enable_call_notifications"
         const val KEY_SERVICE_RUNNING = "service_running"
         const val KEY_INITIAL_PERMISSION_REQUESTED = "initial_permission_requested"
         const val KEY_USE_BASE64 = "use_base64"
@@ -73,6 +74,10 @@ class Preferences(context: Context) {
     var enableCalls: Boolean
         get() = prefs.getBoolean(KEY_ENABLE_CALLS, true)
         set(value) = prefs.edit().putBoolean(KEY_ENABLE_CALLS, value).apply()
+
+    var enableCallNotifications: Boolean
+        get() = prefs.getBoolean(KEY_CALL_NOTIFICATIONS_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_CALL_NOTIFICATIONS_ENABLED, value).apply()
 
     var isServiceRunning: Boolean
         get() = prefs.getBoolean(KEY_SERVICE_RUNNING, false)

@@ -120,6 +120,15 @@
             android:layout_marginBottom="8dp" />
 
         <CheckBox
+            android:id="@+id/cbEnableCallNotifications"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="نوتیفیکیشن بابت لاگ ارسال تماس"
+            android:textColor="@color/white"
+            android:checked="true"
+            android:layout_marginBottom="8dp" />
+
+        <CheckBox
             android:id="@+id/cbUseBase64"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

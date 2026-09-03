@@ -99,6 +99,7 @@ class SettingsActivity : AppCompatActivity() {
         binding.etPassword.setText(prefs.ntfyPassword)
         binding.cbEnableSms.isChecked = prefs.enableSms
         binding.cbEnableCalls.isChecked = prefs.enableCalls
+        binding.cbEnableCallNotifications.isChecked = prefs.enableCallNotifications
         binding.cbUseBase64.isChecked = prefs.useBase64
         binding.cbEnableDeltaChat.isChecked = prefs.deltaChatEnabled
         binding.cbEnableTelegram.isChecked = prefs.telegramEnabled
@@ -193,6 +194,7 @@ class SettingsActivity : AppCompatActivity() {
         prefs.ntfyPassword = binding.etPassword.text.toString().trim()
         prefs.enableSms = binding.cbEnableSms.isChecked
         prefs.enableCalls = binding.cbEnableCalls.isChecked
+        prefs.enableCallNotifications = binding.cbEnableCallNotifications.isChecked
         prefs.useBase64 = binding.cbUseBase64.isChecked
         prefs.ntfyPriority = binding.spinnerPriority.selectedItemPosition
         prefs.deltaChatEnabled = binding.cbEnableDeltaChat.isChecked && prefs.deltaChatChatId > 0

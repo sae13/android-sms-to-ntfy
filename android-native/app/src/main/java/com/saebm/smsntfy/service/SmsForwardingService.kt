@@ -303,25 +303,36 @@ class SmsForwardingService : Service() {
         if (currentPrefs.telegramEnabled) {
             var session: AetherSessionManager.Session? = null
             try {
-                val proxyPort = if (currentPrefs.aetherEnabled) {
+                // 1. Always attempt without proxy first
+                val directClient = telegramClient
+                var result = directClient?.sendSmsMessage(sender, contact, body, timestamp)
+
+                // 2. If it failed and Aether is enabled, attempt with the latest working proxy/discover a new one
+                if (result is TelegramSendResult.Failed && currentPrefs.aetherEnabled) {
                     session = aetherManager?.acquire(
                         currentPrefs.telegramBotToken,
                         keepAlive = false,
                         publicProxy = currentPrefs.aetherPublicProxy
                     )
-                    session?.port
-                } else null
-                val client = if (proxyPort == null) telegramClient else TelegramBotClient(
-                    { com.saebm.smsntfy.telegram.TelegramConfig(true, currentPrefs.telegramBotToken, currentPrefs.telegramChatId) },
-                    { proxyPort }
-                )
-                when (val result = client?.sendSmsMessage(sender, contact, body, timestamp)) {
+                    
+                    if (session != null) {
+                        val proxyClient = TelegramBotClient(
+                            { com.saebm.smsntfy.telegram.TelegramConfig(true, currentPrefs.telegramBotToken, currentPrefs.telegramChatId) },
+                            { session.port }
+                        )
+                        result = proxyClient.sendSmsMessage(sender, contact, body, timestamp)
+                    }
+                }
+
+                when (result) {
                     is TelegramSendResult.Sent -> logEvent("sms", "SMS forwarded to Telegram", "Message sent", sender, contact)
                     is TelegramSendResult.Failed -> logEvent("error", "Failed to forward SMS to Telegram", result.reason, sender, contact, false)
                     null -> logEvent("error", "Failed to forward SMS to Telegram", "Telegram client unavailable", sender, contact, false)
                 }
-            } catch (_: Exception) {
-                Log.e(TAG, "Telegram forwarding failed")
+            } catch (_: java.util.concurrent.CancellationException) {
+                throw _
+            } catch (error: Exception) {
+                Log.e(TAG, "Telegram forwarding failed", error)
                 logEvent("error", "Failed to forward SMS to Telegram", "Telegram or Aether unavailable", sender, contact, false)
             } finally {
                 session?.close()
@@ -352,14 +363,16 @@ class SmsForwardingService : Service() {
                 logEvent("call", "$stateText from $contact", stateText, number, contact)
 
                 // Forward to ntfy
-                ntfyClient?.sendCallNotification(number, contact, state)
-                    ?.also { success ->
-                        if (success) {
-                            logEvent("call", "Call notification sent", stateText, number, contact)
-                        } else {
-                            logEvent("error", "Failed to send call notification", stateText, number, contact, false)
+                if (prefs?.enableCallNotifications != false) {
+                    ntfyClient?.sendCallNotification(number, contact, state)
+                        ?.also { success ->
+                            if (success) {
+                                logEvent("call", "Call notification sent", stateText, number, contact)
+                            } else {
+                                logEvent("error", "Failed to send call notification", stateText, number, contact, false)
+                            }
                         }
-                    }
+                }
 
                 val currentPrefs = prefs
                 if (currentPrefs != null && DeltaChatDestinationPolicy.isReady(
