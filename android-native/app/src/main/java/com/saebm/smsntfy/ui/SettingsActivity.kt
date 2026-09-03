@@ -76,7 +76,7 @@ class SettingsActivity : AppCompatActivity() {
                 is TelegramSettingsValidation.Invalid -> showTelegramValidationError(validation.field)
                 is TelegramSettingsValidation.Valid -> viewModel.testTelegram(
                     config = validation.config,
-                    useAether = binding.cbEnableAether.isChecked,
+                    useAether = true,
                     publicProxy = binding.cbAetherPublicProxy.isChecked
                 ) { success ->
                     Toast.makeText(
@@ -179,8 +179,8 @@ class SettingsActivity : AppCompatActivity() {
                 telegramConfig.enabled,
                 telegramConfig.botToken,
                 telegramConfig.chatId,
-                binding.cbEnableAether.isChecked,
-                binding.cbAetherAlwaysOn.isChecked,
+                aetherEnabled = true,
+                aetherAlwaysOn = false,
                 binding.cbAetherPublicProxy.isChecked
             )
         ) {

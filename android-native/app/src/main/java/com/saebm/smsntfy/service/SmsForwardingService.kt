@@ -307,8 +307,9 @@ class SmsForwardingService : Service() {
                 val directClient = telegramClient
                 var result = directClient?.sendSmsMessage(sender, contact, body, timestamp)
 
-                // 2. If it failed and Aether is enabled, attempt with the latest working proxy/discover a new one
-                if (result is TelegramSendResult.Failed && currentPrefs.aetherEnabled) {
+                // 2. If direct send failed, retry through the last verified Aether route
+                //    (or discover and persist a working one), for every user.
+                if (result is TelegramSendResult.Failed) {
                     session = aetherManager?.acquire(
                         currentPrefs.telegramBotToken,
                         keepAlive = false,
@@ -329,8 +330,8 @@ class SmsForwardingService : Service() {
                     is TelegramSendResult.Failed -> logEvent("error", "Failed to forward SMS to Telegram", result.reason, sender, contact, false)
                     null -> logEvent("error", "Failed to forward SMS to Telegram", "Telegram client unavailable", sender, contact, false)
                 }
-            } catch (_: java.util.concurrent.CancellationException) {
-                throw _
+            } catch (error: java.util.concurrent.CancellationException) {
+                throw error
             } catch (error: Exception) {
                 Log.e(TAG, "Telegram forwarding failed", error)
                 logEvent("error", "Failed to forward SMS to Telegram", "Telegram or Aether unavailable", sender, contact, false)

@@ -247,6 +247,7 @@
             android:layout_height="wrap_content"
             android:text="@string/enable_aether"
             android:textColor="@color/white"
+            android:visibility="gone"
             android:layout_marginBottom="8dp" />
 
         <CheckBox
@@ -255,6 +256,7 @@
             android:layout_height="wrap_content"
             android:text="@string/enable_aether_always"
             android:textColor="@color/white"
+            android:visibility="gone"
             android:layout_marginBottom="8dp" />
 
         <CheckBox
@@ -263,6 +265,7 @@
             android:layout_height="wrap_content"
             android:text="@string/enable_aether_public"
             android:textColor="@color/white"
+            android:visibility="gone"
             android:layout_marginBottom="4dp" />
 
         <TextView
@@ -280,6 +283,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textColor="@color/slate_400"
+            android:visibility="gone"
             android:layout_marginBottom="8dp" />
 
         <Button
@@ -287,6 +291,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="8dp"
+            android:visibility="gone"
             android:text="@string/find_fastest_aether" />
 
         <Button
