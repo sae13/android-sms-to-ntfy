@@ -38,11 +38,12 @@ class AetherArgumentsTest {
             assertTrue(command.containsAll(listOf(
                 "--bind", "127.0.0.1:1819",
                 "--http-proxy", "127.0.0.1:1820",
-                "--perf", "low",
                 "--config", "/data/user/0/com.saebm.smsntfy/no_backup/aether/aether.toml",
                 "--wg-config", "/data/user/0/com.saebm.smsntfy/no_backup/aether/aether-wg.toml",
                 "--masque-config", "/data/user/0/com.saebm.smsntfy/no_backup/aether/aether-masque.toml"
             )))
+            // v1.9.0 auto-tunes flow-control windows; --perf must not override them.
+            assertTrue(!command.contains("--perf"))
         }
         assertTrue(commands[0].containsAll(listOf("--scan", "balanced")))
         assertTrue(commands[1].containsAll(listOf("--scan", "balanced")))

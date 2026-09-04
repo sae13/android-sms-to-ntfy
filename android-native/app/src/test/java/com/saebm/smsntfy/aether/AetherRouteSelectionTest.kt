@@ -261,7 +261,7 @@ class AetherRouteSelectionTest {
         assertTrue(arguments.getValue("gool").containsAll(listOf("--protocol", "gool", "--no-data-check")))
         assertTrue(arguments.values.all { it.contains("--bind") && it.contains("127.0.0.1:1819") })
         assertTrue(arguments.values.all { it.contains("--http-proxy") && it.contains("127.0.0.1:1820") })
-        assertTrue(arguments.values.all { it.contains("--perf") && it.contains("low") })
+        assertTrue(arguments.values.none { it.contains("--perf") })
         assertTrue(arguments.values.all { it.contains("--startup-secs") && it.contains("30") })
         assertTrue(arguments.values.all { it.contains("--validate-secs") && it.contains("10") })
         assertTrue(arguments.values.all { it.contains("--reconnect-secs") && it.contains("2") })

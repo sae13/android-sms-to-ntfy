@@ -98,7 +98,8 @@ object AetherArguments {
             add("--scan"); add(route.scanMode)
             add("--noize"); add(route.noise)
             add("-4")
-            add("--perf"); add("low")
+            // v1.9.0 auto-tunes flow-control windows from device cpu/ram;
+            // overriding with --perf low would force the old 64 KiB h2 window.
             add("--startup-secs"); add("30")
             add("--validate-secs"); add("10")
             add("--reconnect-secs"); add("2")
