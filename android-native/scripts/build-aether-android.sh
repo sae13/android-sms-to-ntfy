@@ -3,7 +3,7 @@ set -euo pipefail
 
 AETHER_REPOSITORY="https://github.com/CluvexStudio/Aether.git"
 AETHER_COMMIT="311b573352bb67e494895ff67d20b002d075116a"
-RUST_TOOLCHAIN="1.88.0"
+RUST_TOOLCHAIN="1.91.0"
 CARGO_NDK_VERSION="4.1.2"
 ANDROID_PLATFORM="24"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
