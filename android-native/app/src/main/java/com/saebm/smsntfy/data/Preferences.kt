@@ -46,6 +46,18 @@ class Preferences(context: Context) {
         const val KEY_AETHER_PUBLIC_PROXY = "aether_public_proxy"
         const val KEY_AETHER_LAST_ROUTE = "aether_last_route"
         const val KEY_AETHER_LAST_STATUS = "aether_last_status"
+        const val KEY_SMTP_ENABLED = "smtp_enabled"
+        const val KEY_SMTP_HOST = "smtp_host"
+        const val KEY_SMTP_PORT = "smtp_port"
+        const val KEY_SMTP_USERNAME = "smtp_username"
+        const val KEY_SMTP_PASSWORD = "smtp_password"
+        const val KEY_SMTP_FROM = "smtp_from"
+        const val KEY_SMTP_RECIPIENT = "smtp_recipient"
+        const val KEY_NEXTCLOUD_ENABLED = "nextcloud_enabled"
+        const val KEY_NEXTCLOUD_SERVER_URL = "nextcloud_server_url"
+        const val KEY_NEXTCLOUD_USERNAME = "nextcloud_username"
+        const val KEY_NEXTCLOUD_APP_PASSWORD = "nextcloud_app_password"
+        const val KEY_NEXTCLOUD_TALK_TOKEN = "nextcloud_talk_token"
 
         // Deliberately no login-code key: credentials belong only in Delta Chat's private database.
     }
@@ -165,6 +177,88 @@ class Preferences(context: Context) {
             .putInt(KEY_DELTACHAT_ACCOUNT_ID, accountId)
             .putInt(KEY_DELTACHAT_CHAT_ID, chatId)
             .commit()
+
+    var smtpEnabled: Boolean
+        get() = prefs.getBoolean(KEY_SMTP_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_SMTP_ENABLED, value).apply()
+
+    var smtpHost: String
+        get() = prefs.getString(KEY_SMTP_HOST, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_SMTP_HOST, value).apply()
+
+    var smtpPort: String
+        get() = prefs.getString(KEY_SMTP_PORT, "587") ?: "587"
+        set(value) = prefs.edit().putString(KEY_SMTP_PORT, value).apply()
+
+    var smtpUsername: String
+        get() = prefs.getString(KEY_SMTP_USERNAME, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_SMTP_USERNAME, value).apply()
+
+    /** App-private preference only; never logged or copied into message bodies. */
+    var smtpPassword: String
+        get() = prefs.getString(KEY_SMTP_PASSWORD, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_SMTP_PASSWORD, value).apply()
+
+    var smtpFrom: String
+        get() = prefs.getString(KEY_SMTP_FROM, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_SMTP_FROM, value).apply()
+
+    var smtpRecipient: String
+        get() = prefs.getString(KEY_SMTP_RECIPIENT, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_SMTP_RECIPIENT, value).apply()
+
+    fun saveSmtpSettings(
+        enabled: Boolean,
+        host: String,
+        port: String,
+        username: String,
+        password: String,
+        from: String,
+        recipient: String
+    ): Boolean = prefs.edit()
+        .putBoolean(KEY_SMTP_ENABLED, enabled)
+        .putString(KEY_SMTP_HOST, host)
+        .putString(KEY_SMTP_PORT, port)
+        .putString(KEY_SMTP_USERNAME, username)
+        .putString(KEY_SMTP_PASSWORD, password)
+        .putString(KEY_SMTP_FROM, from)
+        .putString(KEY_SMTP_RECIPIENT, recipient)
+        .commit()
+
+    var nextcloudEnabled: Boolean
+        get() = prefs.getBoolean(KEY_NEXTCLOUD_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_NEXTCLOUD_ENABLED, value).apply()
+
+    var nextcloudServerUrl: String
+        get() = prefs.getString(KEY_NEXTCLOUD_SERVER_URL, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_NEXTCLOUD_SERVER_URL, value).apply()
+
+    var nextcloudUsername: String
+        get() = prefs.getString(KEY_NEXTCLOUD_USERNAME, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_NEXTCLOUD_USERNAME, value).apply()
+
+    /** App-password stored only in app-private preferences; never logged. */
+    var nextcloudAppPassword: String
+        get() = prefs.getString(KEY_NEXTCLOUD_APP_PASSWORD, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_NEXTCLOUD_APP_PASSWORD, value).apply()
+
+    var nextcloudTalkToken: String
+        get() = prefs.getString(KEY_NEXTCLOUD_TALK_TOKEN, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_NEXTCLOUD_TALK_TOKEN, value).apply()
+
+    fun saveNextcloudSettings(
+        enabled: Boolean,
+        serverUrl: String,
+        username: String,
+        appPassword: String,
+        talkToken: String
+    ): Boolean = prefs.edit()
+        .putBoolean(KEY_NEXTCLOUD_ENABLED, enabled)
+        .putString(KEY_NEXTCLOUD_SERVER_URL, serverUrl)
+        .putString(KEY_NEXTCLOUD_USERNAME, username)
+        .putString(KEY_NEXTCLOUD_APP_PASSWORD, appPassword)
+        .putString(KEY_NEXTCLOUD_TALK_TOKEN, talkToken)
+        .commit()
 
     /**
      * Returns the full ntfy topic URL for sending messages.

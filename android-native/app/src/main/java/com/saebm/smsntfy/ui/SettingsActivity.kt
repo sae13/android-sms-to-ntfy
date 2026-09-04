@@ -111,6 +111,20 @@ class SettingsActivity : AppCompatActivity() {
         updateAetherControls(prefs.aetherEnabled)
         binding.tvAetherStatus.text = "Aether: ${prefs.aetherLastStatus}"
 
+        binding.cbEnableSmtp.isChecked = prefs.smtpEnabled
+        binding.etSmtpHost.setText(prefs.smtpHost)
+        binding.etSmtpPort.setText(prefs.smtpPort)
+        binding.etSmtpUsername.setText(prefs.smtpUsername)
+        binding.etSmtpPassword.setText(prefs.smtpPassword)
+        binding.etSmtpFrom.setText(prefs.smtpFrom)
+        binding.etSmtpRecipient.setText(prefs.smtpRecipient)
+
+        binding.cbEnableNextcloud.isChecked = prefs.nextcloudEnabled
+        binding.etNextcloudServerUrl.setText(prefs.nextcloudServerUrl)
+        binding.etNextcloudUsername.setText(prefs.nextcloudUsername)
+        binding.etNextcloudAppPassword.setText(prefs.nextcloudAppPassword)
+        binding.etNextcloudTalkToken.setText(prefs.nextcloudTalkToken)
+
         binding.spinnerPriority.setSelection(prefs.ntfyPriority)
     }
 
@@ -188,6 +202,50 @@ class SettingsActivity : AppCompatActivity() {
             return
         }
 
+        // SMTP: validate and persist atomically before legacy writes.
+        when (val smtpValidation = com.saebm.smsntfy.smtp.SmtpSettingsPolicy.validate(
+            requestedEnabled = binding.cbEnableSmtp.isChecked,
+            host = binding.etSmtpHost.text?.toString().orEmpty(),
+            port = binding.etSmtpPort.text?.toString().orEmpty(),
+            username = binding.etSmtpUsername.text?.toString().orEmpty(),
+            password = binding.etSmtpPassword.text?.toString().orEmpty(),
+            from = binding.etSmtpFrom.text?.toString().orEmpty(),
+            recipient = binding.etSmtpRecipient.text?.toString().orEmpty()
+        )) {
+            is com.saebm.smsntfy.smtp.SmtpSettingsValidation.Invalid -> {
+                showSmtpValidationError(smtpValidation.field)
+                return
+            }
+            is com.saebm.smsntfy.smtp.SmtpSettingsValidation.Valid -> {
+                val c = smtpValidation.config
+                if (!prefs.saveSmtpSettings(c.enabled, c.host, c.port.toString(), c.username, c.password, c.from, c.recipient)) {
+                    Toast.makeText(this, R.string.smtp_settings_save_failed, Toast.LENGTH_LONG).show()
+                    return
+                }
+            }
+        }
+
+        // Nextcloud: validate and persist atomically before legacy writes.
+        when (val ncValidation = com.saebm.smsntfy.nextcloud.NextcloudSettingsPolicy.validate(
+            requestedEnabled = binding.cbEnableNextcloud.isChecked,
+            serverUrl = binding.etNextcloudServerUrl.text?.toString().orEmpty(),
+            username = binding.etNextcloudUsername.text?.toString().orEmpty(),
+            appPassword = binding.etNextcloudAppPassword.text?.toString().orEmpty(),
+            talkToken = binding.etNextcloudTalkToken.text?.toString().orEmpty()
+        )) {
+            is com.saebm.smsntfy.nextcloud.NextcloudSettingsValidation.Invalid -> {
+                showNextcloudValidationError(ncValidation.field)
+                return
+            }
+            is com.saebm.smsntfy.nextcloud.NextcloudSettingsValidation.Valid -> {
+                val c = ncValidation.config
+                if (!prefs.saveNextcloudSettings(c.enabled, c.serverUrl, c.username, c.appPassword, c.talkToken)) {
+                    Toast.makeText(this, R.string.nextcloud_settings_save_failed, Toast.LENGTH_LONG).show()
+                    return
+                }
+            }
+        }
+
         prefs.ntfyServer = binding.etServerUrl.text.toString().trim()
         prefs.ntfyTopic = binding.etTopic.text.toString().trim()
         prefs.ntfyUsername = binding.etUsername.text.toString().trim()
@@ -225,6 +283,28 @@ class SettingsActivity : AppCompatActivity() {
         val message = when (field) {
             TelegramSettingsField.BOT_TOKEN -> R.string.telegram_invalid_token
             TelegramSettingsField.CHAT_ID -> R.string.telegram_invalid_chat_id
+        }
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    }
+
+    private fun showSmtpValidationError(field: com.saebm.smsntfy.smtp.SmtpSettingsField) {
+        val message = when (field) {
+            com.saebm.smsntfy.smtp.SmtpSettingsField.HOST -> R.string.smtp_invalid_host
+            com.saebm.smsntfy.smtp.SmtpSettingsField.PORT -> R.string.smtp_invalid_port
+            com.saebm.smsntfy.smtp.SmtpSettingsField.USERNAME -> R.string.smtp_invalid_username
+            com.saebm.smsntfy.smtp.SmtpSettingsField.PASSWORD -> R.string.smtp_invalid_password
+            com.saebm.smsntfy.smtp.SmtpSettingsField.FROM -> R.string.smtp_invalid_from
+            com.saebm.smsntfy.smtp.SmtpSettingsField.RECIPIENT -> R.string.smtp_invalid_recipient
+        }
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    }
+
+    private fun showNextcloudValidationError(field: com.saebm.smsntfy.nextcloud.NextcloudSettingsField) {
+        val message = when (field) {
+            com.saebm.smsntfy.nextcloud.NextcloudSettingsField.SERVER_URL -> R.string.nextcloud_invalid_server_url
+            com.saebm.smsntfy.nextcloud.NextcloudSettingsField.USERNAME -> R.string.nextcloud_invalid_username
+            com.saebm.smsntfy.nextcloud.NextcloudSettingsField.APP_PASSWORD -> R.string.nextcloud_invalid_app_password
+            com.saebm.smsntfy.nextcloud.NextcloudSettingsField.TALK_TOKEN -> R.string.nextcloud_invalid_talk_token
         }
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }

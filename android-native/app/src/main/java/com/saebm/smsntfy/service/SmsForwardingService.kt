@@ -72,6 +72,8 @@ class SmsForwardingService : Service() {
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var ntfyClient: NtfyClient? = null
     private var telegramClient: TelegramBotClient? = null
+    private val smtpClient = com.saebm.smsntfy.smtp.SmtpClient()
+    private val nextcloudClient = com.saebm.smsntfy.nextcloud.NextcloudTalkClient()
     private var aetherManager: AetherSessionManager? = null
     private var database: com.saebm.smsntfy.data.AppDatabase? = null
     private var prefs: com.saebm.smsntfy.data.Preferences? = null
@@ -302,6 +304,50 @@ class SmsForwardingService : Service() {
                 logEvent("sms", "SMS forwarded to Delta Chat", "Message queued", sender, contact)
             } else {
                 logEvent("error", "Failed to forward SMS to Delta Chat", "Delta Chat rejected the message", success = false)
+            }
+        }
+
+        // SMTP destination: independent best-effort email delivery.
+        if (currentPrefs.smtpEnabled) {
+            val smtpConfig = com.saebm.smsntfy.smtp.SmtpConfig(
+                enabled = true,
+                host = currentPrefs.smtpHost,
+                port = currentPrefs.smtpPort.toIntOrNull() ?: 587,
+                username = currentPrefs.smtpUsername,
+                password = currentPrefs.smtpPassword,
+                from = currentPrefs.smtpFrom,
+                recipient = currentPrefs.smtpRecipient
+            )
+            val smtpMessage = com.saebm.smsntfy.smtp.SmtpMessageFormatter.sms(
+                sender = sender, contact = contact, body = body, timestamp = formatTimestamp(timestamp)
+            )
+            val smtpResult = smtpClient.send(smtpConfig, smtpMessage)
+            when (smtpResult) {
+                is com.saebm.smsntfy.smtp.SmtpSendResult.Sent ->
+                    logEvent("sms", "SMS forwarded to email", "Message sent", sender, contact)
+                is com.saebm.smsntfy.smtp.SmtpSendResult.Failed ->
+                    logEvent("error", "Failed to forward SMS to email", smtpResult.reason, sender, contact, false)
+            }
+        }
+
+        // Nextcloud Talk destination: independent best-effort delivery.
+        if (currentPrefs.nextcloudEnabled) {
+            val nextcloudConfig = com.saebm.smsntfy.nextcloud.NextcloudConfig(
+                enabled = true,
+                serverUrl = currentPrefs.nextcloudServerUrl,
+                username = currentPrefs.nextcloudUsername,
+                appPassword = currentPrefs.nextcloudAppPassword,
+                talkToken = currentPrefs.nextcloudTalkToken
+            )
+            val nextcloudText = DeltaChatMessageFormatter.sms(
+                sender = sender, contact = contact, message = body, timestamp = formatTimestamp(timestamp)
+            )
+            val nextcloudResult = nextcloudClient.send(nextcloudConfig, nextcloudText)
+            when (nextcloudResult) {
+                is com.saebm.smsntfy.nextcloud.NextcloudSendResult.Sent ->
+                    logEvent("sms", "SMS forwarded to Nextcloud Talk", "Message sent", sender, contact)
+                is com.saebm.smsntfy.nextcloud.NextcloudSendResult.Failed ->
+                    logEvent("error", "Failed to forward SMS to Nextcloud Talk", nextcloudResult.reason, sender, contact, false)
             }
         }
 
