@@ -64,6 +64,12 @@ object ServiceStartPolicy {
 
     fun supportsTypedForeground(sdkInt: Int): Boolean = sdkInt >= 29
 
+    inline fun runTypedForegroundIfSupported(sdkInt: Int, start: () -> Unit): Boolean {
+        if (!supportsTypedForeground(sdkInt)) return false
+        start()
+        return true
+    }
+
     fun foregroundServiceTypes(sdkInt: Int): Int =
         if (sdkInt >= 34) {
             android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE

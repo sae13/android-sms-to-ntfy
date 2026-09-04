@@ -272,6 +272,32 @@ class AetherRouteSelectionTest {
     }
 
     @Test
+    fun processCompatibilityTreatsRunningAndExitedProcessesCorrectly() {
+        assertTrue(AetherProcessCompatibility.isAlive { throw IllegalThreadStateException() })
+        assertFalse(AetherProcessCompatibility.isAlive { 0 })
+    }
+
+    @Test
+    fun processCompatibilityWaitsOnlyUntilTheDeadline() {
+        var now = 0L
+        var sleeps = 0
+
+        val stopped = AetherProcessCompatibility.waitForExit(
+            timeoutMs = 25L,
+            isAlive = { true },
+            nowMillis = { now },
+            sleep = { delay ->
+                sleeps++
+                now += delay
+            }
+        )
+
+        assertFalse(stopped)
+        assertTrue(sleeps > 0)
+        assertTrue(now >= 25L)
+    }
+
+    @Test
     fun candidateArgumentsUseTransportSpecificNoiseAndScanProfiles() {
         val endpoints = AetherEndpointPolicy.endpoints(false)
         val stateDirectory = "/tmp/aether"

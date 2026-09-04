@@ -24,6 +24,8 @@ import java.util.TimeZone
 import com.saebm.smsntfy.receiver.CallReceiver
 import com.saebm.smsntfy.sms.ContactHelper
 import com.saebm.smsntfy.telegram.TelegramBotClient
+import com.saebm.smsntfy.telegram.TelegramConfig
+import com.saebm.smsntfy.telegram.TelegramFallbackChain
 import com.saebm.smsntfy.telegram.TelegramSendResult
 import com.saebm.smsntfy.aether.AetherSessionManager
 import com.saebm.smsntfy.aether.AetherSessionPolicy
@@ -31,10 +33,12 @@ import com.saebm.smsntfy.util.WakeLockHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -196,12 +200,14 @@ class SmsForwardingService : Service() {
 
     private fun ensureForegroundStarted() {
         val notification = createNotification(getString(R.string.notification_text_connecting))
-        if (ServiceStartPolicy.supportsTypedForeground(Build.VERSION.SDK_INT)) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceStartPolicy.foregroundServiceTypes(Build.VERSION.SDK_INT)
-            )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ServiceStartPolicy.runTypedForegroundIfSupported(Build.VERSION.SDK_INT) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceStartPolicy.foregroundServiceTypes(Build.VERSION.SDK_INT)
+                )
+            }
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
@@ -303,32 +309,38 @@ class SmsForwardingService : Service() {
         if (currentPrefs.telegramEnabled) {
             var session: AetherSessionManager.Session? = null
             try {
-                // 1. Always attempt without proxy first
-                val directClient = telegramClient
-                var result = directClient?.sendSmsMessage(sender, contact, body, timestamp)
-
-                // 2. If direct send failed, retry through the last verified Aether route
-                //    (or discover and persist a working one), for every user.
-                if (result is TelegramSendResult.Failed) {
-                    session = aetherManager?.acquire(
-                        currentPrefs.telegramBotToken,
-                        keepAlive = false,
-                        publicProxy = currentPrefs.aetherPublicProxy
-                    )
-                    
-                    if (session != null) {
-                        val proxyClient = TelegramBotClient(
-                            { com.saebm.smsntfy.telegram.TelegramConfig(true, currentPrefs.telegramBotToken, currentPrefs.telegramChatId) },
-                            { session.port }
+                val result = TelegramFallbackChain.send(
+                    direct = {
+                        telegramClient?.sendSmsMessage(sender, contact, body, timestamp)
+                            ?: TelegramSendResult.RouteUnavailable("Telegram client unavailable")
+                    },
+                    aether = {
+                        session = aetherManager?.acquire(
+                            currentPrefs.telegramBotToken,
+                            keepAlive = false,
+                            publicProxy = currentPrefs.aetherPublicProxy
                         )
-                        result = proxyClient.sendSmsMessage(sender, contact, body, timestamp)
+
+                        session?.let { activeSession ->
+                            TelegramBotClient(
+                                {
+                                    TelegramConfig(
+                                        true,
+                                        currentPrefs.telegramBotToken,
+                                        currentPrefs.telegramChatId
+                                    )
+                                },
+                                { activeSession.port }
+                            ).sendSmsMessage(sender, contact, body, timestamp)
+                        } ?: TelegramSendResult.RouteUnavailable("Aether route unavailable")
                     }
-                }
+                )
 
                 when (result) {
                     is TelegramSendResult.Sent -> logEvent("sms", "SMS forwarded to Telegram", "Message sent", sender, contact)
                     is TelegramSendResult.Failed -> logEvent("error", "Failed to forward SMS to Telegram", result.reason, sender, contact, false)
-                    null -> logEvent("error", "Failed to forward SMS to Telegram", "Telegram client unavailable", sender, contact, false)
+                    is TelegramSendResult.RouteUnavailable -> logEvent("error", "Failed to forward SMS to Telegram", result.reason, sender, contact, false)
+                    is TelegramSendResult.Ambiguous -> logEvent("error", "Telegram delivery status is unknown", result.reason, sender, contact, false)
                 }
             } catch (error: java.util.concurrent.CancellationException) {
                 throw error
@@ -336,7 +348,7 @@ class SmsForwardingService : Service() {
                 Log.e(TAG, "Telegram forwarding failed", error)
                 logEvent("error", "Failed to forward SMS to Telegram", "Telegram or Aether unavailable", sender, contact, false)
             } finally {
-                session?.close()
+                withContext(NonCancellable) { session?.close() }
             }
         }
     }

@@ -172,6 +172,17 @@ class ServicePayloadPolicyTest {
     }
 
     @Test
+    fun typedForegroundInvocationRunsOnlyOnAndroidTenAndNewer() {
+        var invocations = 0
+
+        ServiceStartPolicy.runTypedForegroundIfSupported(sdkInt = 28) { invocations++ }
+        assertEquals(0, invocations)
+
+        ServiceStartPolicy.runTypedForegroundIfSupported(sdkInt = 29) { invocations++ }
+        assertEquals(1, invocations)
+    }
+
+    @Test
     fun stopActionSkipsDependencyInitialization() {
         assertFalse(ServiceStartPolicy.requiresDependencies(SmsForwardingService.ACTION_STOP_SERVICE))
         assertTrue(ServiceStartPolicy.requiresDependencies(SmsForwardingService.ACTION_START_SERVICE))

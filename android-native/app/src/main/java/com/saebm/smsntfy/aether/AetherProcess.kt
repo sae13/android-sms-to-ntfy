@@ -8,7 +8,6 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.InetSocketAddress
 import java.net.Socket
-import java.util.concurrent.TimeUnit
 
 interface AetherProcess {
     suspend fun start(route: AetherRoute, endpoints: AetherEndpoints)
@@ -61,6 +60,30 @@ object AetherRouteOrdering {
     }
 }
 
+internal object AetherProcessCompatibility {
+    fun isAlive(exitValue: () -> Int): Boolean = try {
+        exitValue()
+        false
+    } catch (_: IllegalThreadStateException) {
+        true
+    }
+
+    fun waitForExit(
+        timeoutMs: Long,
+        isAlive: () -> Boolean,
+        nowMillis: () -> Long = System::currentTimeMillis,
+        sleep: (Long) -> Unit = Thread::sleep
+    ): Boolean {
+        val deadline = nowMillis() + timeoutMs
+        while (isAlive()) {
+            val remaining = deadline - nowMillis()
+            if (remaining <= 0L) return false
+            sleep(minOf(remaining, 50L))
+        }
+        return true
+    }
+}
+
 object AetherArguments {
     fun build(
         binary: String,
@@ -99,7 +122,7 @@ class AndroidAetherProcess(
     @Volatile private var process: Process? = null
 
     override suspend fun start(route: AetherRoute, endpoints: AetherEndpoints) = withContext(Dispatchers.IO) {
-        check(process?.isAlive != true) { "Aether is already running" }
+        check(!isAlive()) { "Aether is already running" }
         check(stateDirectory.isDirectory || stateDirectory.mkdirs()) {
             "Cannot create Aether state directory"
         }
@@ -112,11 +135,23 @@ class AndroidAetherProcess(
             stateDirectory.absolutePath
         )
         Log.i(TAG, "Starting ${route.id}: ${arguments.drop(1).joinToString(" ")}")
-        process = ProcessBuilder(arguments)
+        val started = ProcessBuilder(arguments)
             .directory(stateDirectory)
             .redirectErrorStream(true)
-            .redirectOutput(ProcessBuilder.Redirect.to(outputFile))
             .start()
+        process = started
+        Thread({
+            runCatching {
+                started.inputStream.use { input ->
+                    outputFile.outputStream().buffered().use(input::copyTo)
+                }
+            }.onFailure { error ->
+                Log.w(TAG, "Aether output capture stopped: ${error.javaClass.simpleName}")
+            }
+        }, "sms-ntfy-aether-log").apply {
+            isDaemon = true
+            start()
+        }
         Log.i(TAG, "Started ${route.id}")
         Unit
     }
@@ -138,13 +173,14 @@ class AndroidAetherProcess(
     override suspend fun stop(timeoutMs: Long) = withContext(Dispatchers.IO) {
         val current = process ?: return@withContext
         current.destroy()
-        if (!current.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
-            current.destroyForcibly()
-            current.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
+        check(AetherProcessCompatibility.waitForExit(timeoutMs, { isProcessAlive(current) })) {
+            "Aether process did not stop"
         }
-        check(!current.isAlive) { "Aether process did not stop" }
         process = null
     }
 
-    override fun isAlive(): Boolean = process?.isAlive == true
+    override fun isAlive(): Boolean = process?.let(::isProcessAlive) == true
+
+    private fun isProcessAlive(candidate: Process): Boolean =
+        AetherProcessCompatibility.isAlive(candidate::exitValue)
 }

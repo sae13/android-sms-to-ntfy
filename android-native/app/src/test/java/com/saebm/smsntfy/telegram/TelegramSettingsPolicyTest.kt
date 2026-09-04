@@ -34,6 +34,18 @@ class TelegramSettingsPolicyTest {
     }
 
     @Test
+    fun botIdCannotBeUsedAsDestinationChatId() {
+        val result = TelegramSettingsPolicy.validate(
+            requestedEnabled = true,
+            botToken = "123456:ABCDEFGHIJKLMNOPQRSTUVWXYZabcd",
+            chatId = "123456"
+        )
+
+        assertTrue(result is TelegramSettingsValidation.Invalid)
+        assertEquals(TelegramSettingsField.CHAT_ID, (result as TelegramSettingsValidation.Invalid).field)
+    }
+
+    @Test
     fun disabledSettingsMayBeSavedWithoutCredentials() {
         val result = TelegramSettingsPolicy.validate(false, "", "")
 

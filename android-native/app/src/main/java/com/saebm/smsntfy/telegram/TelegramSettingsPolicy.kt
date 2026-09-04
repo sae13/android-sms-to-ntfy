@@ -17,6 +17,9 @@ object TelegramSettingsPolicy {
         if (!TelegramBotClient.isValidChatId(normalized.chatId)) {
             return TelegramSettingsValidation.Invalid(TelegramSettingsField.CHAT_ID)
         }
+        if (normalized.chatId == TelegramBotClient.botId(normalized.botToken)) {
+            return TelegramSettingsValidation.Invalid(TelegramSettingsField.CHAT_ID)
+        }
         return TelegramSettingsValidation.Valid(normalized)
     }
 }

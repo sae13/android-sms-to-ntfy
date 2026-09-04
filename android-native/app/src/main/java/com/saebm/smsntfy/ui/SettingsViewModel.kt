@@ -8,8 +8,9 @@ import com.saebm.smsntfy.SmsNtfyApplication
 import com.saebm.smsntfy.deltachat.DeltaChatSetupResult
 import com.saebm.smsntfy.deltachat.DeltaChatSendResult
 import com.saebm.smsntfy.network.NtfyClient
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
@@ -109,7 +110,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             } catch (_: LinkageError) {
                 false
             } finally {
-                session?.close()
+                withContext(NonCancellable) { session?.close() }
             }
             onComplete(success)
         }
