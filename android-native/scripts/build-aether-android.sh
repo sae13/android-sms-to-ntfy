@@ -109,7 +109,9 @@ for abi in "${requested_abis[@]}"; do
   if [[ -n "${!target_bindgen_var:-}" ]]; then
     target_bindgen_args+=" ${!target_bindgen_var}"
   fi
-  printf -v "$target_bindgen_var" -- '%s --target=%s -I%s' "$target_bindgen_args" "$rust_target" "$CLANG_RESOURCE_INCLUDE"
+  # Bionic exposes fixed-width integer types according to the selected API.
+  printf -v "$target_bindgen_var" -- '%s --target=%s -D__ANDROID_API__=%s -I%s' \
+    "$target_bindgen_args" "$rust_target" "${ANDROID_PLATFORM#android-}" "$CLANG_RESOURCE_INCLUDE"
   export "${target_bindgen_var?}"
   (
     cd "$SOURCE/aether"
