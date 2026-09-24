@@ -31,7 +31,12 @@ command -v cargo >/dev/null
 command -v rustup >/dev/null
 command -v cmake >/dev/null
 
-if [[ -z "${LIBCLANG_PATH:-}" ]]; then
+# bindgen loads libclang on the host, but its generated BoringSSL bindings must
+# use the matching Android target and Clang resource headers for each ABI. The
+# NDK's libclang cannot reliably parse its own Android stdint.h in GitHub CI,
+# so let clang-sys discover the runner's compatible host libclang there. Local
+# hosts without libclang use the NDK fallback; caller selections remain intact.
+if [[ -z "${LIBCLANG_PATH:-}" && -z "${CI:-}" ]]; then
   shopt -s nullglob
   libclang_candidates=("$ANDROID_NDK_HOME"/toolchains/llvm/prebuilt/*/lib/libclang.so)
   shopt -u nullglob
@@ -43,8 +48,6 @@ if [[ -z "${LIBCLANG_PATH:-}" ]]; then
   export LIBCLANG_PATH
 fi
 
-# bindgen loads libclang on the host, but its generated BoringSSL bindings must
-# use the matching Android target and Clang resource headers for each ABI.
 shopt -s nullglob
 clang_resource_include_candidates=("$ANDROID_NDK_HOME"/toolchains/llvm/prebuilt/*/lib/clang/*/include)
 shopt -u nullglob
