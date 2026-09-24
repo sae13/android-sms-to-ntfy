@@ -74,10 +74,17 @@ jobs:
           ndk-version: r26d
           local-cache: false
 
+      - name: Install host libclang for bindgen
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends libclang-18-dev
+          test -f /usr/lib/llvm-18/lib/libclang.so
+
       - name: Build pinned native cores
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
+          LIBCLANG_PATH: /usr/lib/llvm-18/lib
         run: |
           android-native/scripts/build-aether-android.sh
           android-native/scripts/build-deltachat-android.sh
@@ -280,10 +287,17 @@ jobs:
           ndk-version: r26d
           local-cache: false
 
+      - name: Install host libclang for bindgen
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends libclang-18-dev
+          test -f /usr/lib/llvm-18/lib/libclang.so
+
       - name: Build pinned native cores
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
+          LIBCLANG_PATH: /usr/lib/llvm-18/lib
         run: |
           android-native/scripts/build-aether-android.sh
           android-native/scripts/build-deltachat-android.sh

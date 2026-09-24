@@ -33,10 +33,10 @@ command -v cmake >/dev/null
 
 # bindgen loads libclang on the host, but its generated BoringSSL bindings must
 # use the matching Android target and Clang resource headers for each ABI. The
-# NDK's libclang cannot reliably parse its own Android stdint.h in GitHub CI,
-# so let clang-sys discover the runner's compatible host libclang there. Local
-# hosts without libclang use the NDK fallback; caller selections remain intact.
-if [[ -z "${LIBCLANG_PATH:-}" && -z "${CI:-}" ]]; then
+# The NDK's libclang cannot reliably parse its own Android stdint.h in GitHub
+# CI, so the workflow supplies a compatible host libclang. Local hosts without
+# an explicit libclang use the NDK fallback; caller selections remain intact.
+if [[ -z "${LIBCLANG_PATH:-}" ]]; then
   shopt -s nullglob
   libclang_candidates=("$ANDROID_NDK_HOME"/toolchains/llvm/prebuilt/*/lib/libclang.so)
   shopt -u nullglob
