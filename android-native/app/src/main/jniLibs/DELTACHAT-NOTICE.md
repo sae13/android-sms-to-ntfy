@@ -18,8 +18,8 @@ Java loads only `libnative-utils.so`; no standalone `libdeltachat.so` is package
 
 SHA-256 (reproducible artifacts):
 
-- `arm64-v8a/libnative-utils.so`: `0944b5459f7f690d527d5d86ad65d2f5ce8b5aa9ca3e76a725bf334109b9b093`
-- `armeabi-v7a/libnative-utils.so`: `4421eca8dabb808e9b5dc0aa04eb99ba7b59404b66c931c71d4baf2800662493`
+- `arm64-v8a/libnative-utils.so`: `eba8ea11446226f0c45574e0f3f14843ff94c6490f650da8e05f24c4d439d007`
+- `armeabi-v7a/libnative-utils.so`: `bfccaea901ef438ba5bcfb3e7c3706813b50bc77f58bd471d2ab1715f24e44ac`
 
 The corresponding source is available at the repository above at the pinned
 release/revisions. The included license text is packaged as

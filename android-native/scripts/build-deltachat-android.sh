@@ -10,7 +10,10 @@ ANDROID_PLATFORM="21"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SOURCE="${DELTACHAT_SOURCE_DIR:-$ROOT/.deltachat-src}"
 BUILD_ROOT="${DELTACHAT_BUILD_DIR:-$ROOT/.deltachat-build}"
-CARGO_TARGET_DIR="${DELTACHAT_CARGO_TARGET_DIR:-$BUILD_ROOT/cargo-target}"
+# OpenSSL embeds its install prefix in the static archive linked into
+# libnative-utils.so. Keep that prefix independent from the checkout path so
+# CI and local builds produce the same bytes.
+CARGO_TARGET_DIR="${DELTACHAT_CARGO_TARGET_DIR:-/tmp/sms-ntfy-deltachat-cargo-target}"
 DESTINATION="$ROOT/app/src/main/jniLibs"
 NOTICE_ASSET="$ROOT/app/src/main/nativeNotices/deltachat"
 SUPPORTED_ABIS=(arm64-v8a armeabi-v7a)
