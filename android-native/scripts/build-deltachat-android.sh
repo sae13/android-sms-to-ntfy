@@ -18,7 +18,7 @@ SUPPORTED_ABIS=(arm64-v8a armeabi-v7a)
 if [[ -d "$HOME/.cargo/bin" ]]; then
   export PATH="$HOME/.cargo/bin:$PATH"
 fi
-for command in git rustup cargo python3 file sha256sum install realpath; do
+for command in git rustup cargo python3 sha256sum install realpath; do
   command -v "$command" >/dev/null || {
     echo "Missing required command: $command" >&2
     exit 1
@@ -98,9 +98,13 @@ declare -A ABI_CLANG_PREFIXES=(
   [arm64-v8a]=aarch64-linux-android
   [armeabi-v7a]=armv7a-linux-androideabi
 )
-declare -A ABI_FILE_PATTERNS=(
-  [arm64-v8a]='ELF 64-bit LSB shared object, ARM aarch64'
-  [armeabi-v7a]='ELF 32-bit LSB shared object, ARM'
+declare -A ABI_ELF_CLASSES=(
+  [arm64-v8a]=ELF64
+  [armeabi-v7a]=ELF32
+)
+declare -A ABI_ELF_MACHINES=(
+  [arm64-v8a]=AArch64
+  [armeabi-v7a]=ARM
 )
 
 for abi in "${SUPPORTED_ABIS[@]}"; do
@@ -148,7 +152,10 @@ mkdir -p "$NDK_BUILD_ROOT/obj" "$NDK_BUILD_ROOT/libs"
 for abi in "${SUPPORTED_ABIS[@]}"; do
   built_library="$NDK_BUILD_ROOT/libs/$abi/libnative-utils.so"
   test -s "$built_library"
-  file "$built_library" | grep -Fq "${ABI_FILE_PATTERNS[$abi]}"
+  elf_header="$("$LLVM_BIN/llvm-readelf" -h "$built_library")"
+  grep -Eq "^[[:space:]]*Class:[[:space:]]+${ABI_ELF_CLASSES[$abi]}$" <<< "$elf_header"
+  grep -Eq "^[[:space:]]*Type:[[:space:]]+DYN \(Shared object file\)$" <<< "$elf_header"
+  grep -Eq "^[[:space:]]*Machine:[[:space:]]+${ABI_ELF_MACHINES[$abi]}$" <<< "$elf_header"
   mkdir -p "$DESTINATION/$abi"
   install -m 0644 "$built_library" "$DESTINATION/$abi/libnative-utils.so"
   # The JNI wrapper statically embeds libdeltachat.a and is the only library loaded by Java.

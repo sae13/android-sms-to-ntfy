@@ -12,7 +12,7 @@ DESTINATION="$ROOT/app/src/main/jniLibs"
 NOTICE="$ROOT/app/src/main/nativeNotices/deltachat/NOTICE.md"
 DELTACHAT_ABIS="${DELTACHAT_ABIS:-arm64-v8a armeabi-v7a}"
 
-for command in git file sha256sum grep cmp; do
+for command in git sha256sum grep cmp; do
   command -v "$command" >/dev/null || {
     echo "Missing required command: $command" >&2
     exit 1
@@ -50,9 +50,13 @@ test "$(git -C "$SOURCE" rev-parse HEAD:jni/deltachat-core-rust)" = "$DELTACHAT_
 test "$(git -C "$SOURCE/jni/deltachat-core-rust" rev-parse HEAD)" = "$DELTACHAT_CORE_COMMIT"
 test "$(tr -d '[:space:]' < "$SOURCE/scripts/rust-toolchain")" = "$DELTACHAT_RUST_TOOLCHAIN"
 
-declare -A ABI_FILE_PATTERNS=(
-  [arm64-v8a]='ELF 64-bit LSB shared object, ARM aarch64'
-  [armeabi-v7a]='ELF 32-bit LSB shared object, ARM'
+declare -A ABI_ELF_CLASSES=(
+  [arm64-v8a]=ELF64
+  [armeabi-v7a]=ELF32
+)
+declare -A ABI_ELF_MACHINES=(
+  [arm64-v8a]=AArch64
+  [armeabi-v7a]=ARM
 )
 read -r -a requested_abis <<< "$DELTACHAT_ABIS"
 if [[ " ${requested_abis[*]} " != " arm64-v8a armeabi-v7a " ]]; then
@@ -62,21 +66,29 @@ fi
 
 for abi in "${requested_abis[@]}"; do
   library="$DESTINATION/$abi/libnative-utils.so"
-  pattern="${ABI_FILE_PATTERNS[$abi]:-}"
-  if [[ -z "$pattern" ]]; then
+  elf_class="${ABI_ELF_CLASSES[$abi]:-}"
+  elf_machine="${ABI_ELF_MACHINES[$abi]:-}"
+  if [[ -z "$elf_class" || -z "$elf_machine" ]]; then
     echo "Unsupported Delta Chat ABI: $abi" >&2
     exit 1
   fi
   test -s "$library"
-  file "$library" | grep -Fq "$pattern"
-  file "$library" | grep -Fq "built by NDK r26d (11579264)"
-  "$LLVM_BIN/llvm-readelf" -d "$library" | grep -Fq 'Library soname: [libnative-utils.so]'
-  if "$LLVM_BIN/llvm-readelf" -d "$library" | grep -Fq 'Shared library: [libdeltachat.so]'; then
+  elf_header="$("$LLVM_BIN/llvm-readelf" -h "$library")"
+  grep -Eq "^[[:space:]]*Class:[[:space:]]+$elf_class$" <<< "$elf_header"
+  grep -Eq "^[[:space:]]*Type:[[:space:]]+DYN \(Shared object file\)$" <<< "$elf_header"
+  grep -Eq "^[[:space:]]*Machine:[[:space:]]+$elf_machine$" <<< "$elf_header"
+  elf_notes="$("$LLVM_BIN/llvm-readelf" -n "$library")"
+  grep -Fq "NT_ANDROID_TYPE_IDENT" <<< "$elf_notes"
+  grep -Fq "72 32 36 64" <<< "$elf_notes"
+  grep -Fq "31 31 35 37 39 32 36 34" <<< "$elf_notes"
+  elf_dynamic="$("$LLVM_BIN/llvm-readelf" -d "$library")"
+  grep -Fq 'Library soname: [libnative-utils.so]' <<< "$elf_dynamic"
+  if grep -Fq 'Shared library: [libdeltachat.so]' <<< "$elf_dynamic"; then
     echo "$library dynamically links libdeltachat.so; the pinned core must be embedded statically." >&2
     exit 1
   fi
-  jni_exports="$($LLVM_BIN/llvm-nm -D --defined-only "$library" | grep -c ' Java_' || true)"
-  core_exports="$($LLVM_BIN/llvm-nm -D --defined-only "$library" | grep -c ' dc_' || true)"
+  jni_exports="$("$LLVM_BIN/llvm-nm" -D --defined-only "$library" | grep -c ' Java_' || true)"
+  core_exports="$("$LLVM_BIN/llvm-nm" -D --defined-only "$library" | grep -c ' dc_' || true)"
   if (( jni_exports < 200 )); then
     echo "$library exposes only $jni_exports JNI symbols." >&2
     exit 1
