@@ -43,9 +43,16 @@ if [[ -z "${LIBCLANG_PATH:-}" ]]; then
   export LIBCLANG_PATH
 fi
 
-# bindgen uses the host libclang. Point it at the Android sysroot so standard
-# C headers resolve while generating BoringSSL bindings for each target.
-export BINDGEN_EXTRA_CLANG_ARGS="${BINDGEN_EXTRA_CLANG_ARGS:-} --sysroot=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot -isystem $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/include"
+# bindgen loads libclang on the host, but its generated BoringSSL bindings must
+# use the matching Android target and Clang resource headers for each ABI.
+shopt -s nullglob
+clang_resource_include_candidates=("$ANDROID_NDK_HOME"/toolchains/llvm/prebuilt/*/lib/clang/*/include)
+shopt -u nullglob
+if [[ "${#clang_resource_include_candidates[@]}" -eq 0 ]]; then
+  echo "Clang resource headers were not found in ANDROID_NDK_HOME" >&2
+  exit 1
+fi
+CLANG_RESOURCE_INCLUDE="${clang_resource_include_candidates[0]}"
 
 rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
 installed_cargo_ndk="$(cargo +"$RUST_TOOLCHAIN" ndk --version 2>/dev/null || true)"
@@ -94,6 +101,13 @@ done
 
 for abi in "${requested_abis[@]}"; do
   rust_target="${ABI_TARGETS[$abi]}"
+  target_bindgen_var="BINDGEN_EXTRA_CLANG_ARGS_${rust_target//-/_}"
+  target_bindgen_args="${BINDGEN_EXTRA_CLANG_ARGS:-}"
+  if [[ -n "${!target_bindgen_var:-}" ]]; then
+    target_bindgen_args+=" ${!target_bindgen_var}"
+  fi
+  printf -v "$target_bindgen_var" -- '%s --target=%s -I%s' "$target_bindgen_args" "$rust_target" "$CLANG_RESOURCE_INCLUDE"
+  export "${target_bindgen_var?}"
   (
     cd "$SOURCE/aether"
     cargo +"$RUST_TOOLCHAIN" ndk \
@@ -101,6 +115,7 @@ for abi in "${requested_abis[@]}"; do
       --platform "$ANDROID_PLATFORM" \
       build --locked --release --bin aether
   )
+  unset "$target_bindgen_var"
   mkdir -p "$OUT/$abi"
   install -m 0755 "$SOURCE/aether/target/$rust_target/release/aether" "$OUT/$abi/libaether.so"
   test -s "$OUT/$abi/libaether.so"

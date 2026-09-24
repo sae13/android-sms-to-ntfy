@@ -2,7 +2,7 @@
 title: 'بهروزرسانی Aether و Delta Chat و انتشار قابل تشخیص اندروید'
 type: 'feature'
 created: '2026-09-24'
-status: 'in-review'
+status: 'done'
 route: 'dispatch'
 review_loop_iteration: 0
 baseline_commit: '5ce03990e38533b545e665dbc6ffa74029effca6'
@@ -60,6 +60,28 @@ context: []
 - Given گوشی دارای نسخهٔ debug ۱۸، when APK debug نسخهٔ ۱۹ نصب میشود، then نصب درجا موفق، داده حفظ، برنامه launch و هیچ خطای fatal/JNI دیده نمیشود.
 - Given تنظیمات خصوصی موجود روی گوشی، when آزمونهای native اجرا میشوند، then account manager دلتاچت ساخته و Aether درخواست واقعی Telegram را عبور میدهد.
 - Given انتشار production نسخهٔ ۱۹، when نسخهٔ ۱۸ بررسی update میکند، then release جدید و APK ARM64 را تشخیص میدهد.
+
+### Review Findings
+
+- [x] [Review][Patch] Preserve caller-supplied bindgen flags when adding required target-specific flags [android-native/scripts/build-aether-android.sh:104]
+- [x] [Review][Patch] Document why bindgen requires target-specific Clang resource arguments [android-native/scripts/build-aether-android.sh:46]
+- [x] [Review][Defer] Quote bindgen resource paths so NDK locations containing whitespace remain one argument [android-native/scripts/build-aether-android.sh:103] — deferred, pre-existing
+- [x] [Review][Defer] Keep custom LIBCLANG_PATH aligned with the selected Clang resource headers [android-native/scripts/build-aether-android.sh:34] — deferred, pre-existing
+
+#### Dismissed
+
+- Add the Android API suffix to each bindgen target — dismissed because the pinned BoringSSL public headers expose no API-gated declarations, while both required ABI builds pass and native compilation already receives API 24.
+- Canonicalize the ARMv7 bindgen target to armv7a-linux-androideabi24 — dismissed because the current triple selects the correct ARM architecture and NDK sysroot declarations; no binding-layout difference was substantiated for the pinned source.
+- Restore an explicit bindgen sysroot — dismissed because boring-sys 4.22.0 already adds the selected NDK sysroot for Android, confirmed by source inspection and header tracing.
+- Reject multiple Clang resource-directory candidates — dismissed because the pinned NDK contains exactly one candidate and no supported build path reaches the claimed ambiguity.
+- Validate the discovered resource directory and stddef.h earlier — dismissed because the pinned directory is readable and complete; the claimed consequence requires a malformed NDK outside the supported pinned toolchain.
+- Use -isystem instead of -I for Clang resource headers — dismissed because neither changed warning behavior nor incorrect output was observed; both required ABI builds complete successfully.
+- Query clang -print-resource-dir instead of inferring the path — dismissed because the discovered path exactly matches the selected pinned Clang resource directory.
+- Expand the missing-resource error message with the path and glob — dismissed because the existing message identifies the failed resource and ANDROID_NDK_HOME; no actionable failure-path defect was substantiated.
+- Add architecture and Android API macro preflight assertions — dismissed because the exact pinned dependency builds end to end for both supported ABIs and no current binding defect from those macros was found.
+- Add coverage for custom flags, whitespace paths, multiple resource directories, and custom libclang — dismissed as one combined claim because the two confirmed compatibility concerns are recorded separately as deferred pre-existing work, while the remaining scenarios do not occur in the supported pinned toolchain.
+- Acceptance-criteria violation — dismissed because the acceptance audit found none in this focused CI repair.
+- Verification gap — dismissed because the verification audit found none after the successful two-ABI builds and static checks.
 
 ## Implementation Notes
 
