@@ -32,10 +32,10 @@ command -v rustup >/dev/null
 command -v cmake >/dev/null
 
 # bindgen loads libclang on the host, but its generated BoringSSL bindings must
-# use the matching Android target and Clang resource headers for each ABI. The
-# The NDK's libclang cannot reliably parse its own Android stdint.h in GitHub
-# CI, so the workflow supplies a compatible host libclang. Local hosts without
-# an explicit libclang use the NDK fallback; caller selections remain intact.
+# use the matching Android target and Clang resource headers for each ABI. Keep
+# the resource headers paired with the selected libclang: mixing host libclang
+# 18 with the NDK's Clang 17 headers breaks stdint.h include_next resolution.
+# Local hosts without an explicit libclang use the NDK fallback.
 if [[ -z "${LIBCLANG_PATH:-}" ]]; then
   shopt -s nullglob
   libclang_candidates=("$ANDROID_NDK_HOME"/toolchains/llvm/prebuilt/*/lib/libclang.so)
@@ -48,14 +48,20 @@ if [[ -z "${LIBCLANG_PATH:-}" ]]; then
   export LIBCLANG_PATH
 fi
 
-shopt -s nullglob
-clang_resource_include_candidates=("$ANDROID_NDK_HOME"/toolchains/llvm/prebuilt/*/lib/clang/*/include)
-shopt -u nullglob
-if [[ "${#clang_resource_include_candidates[@]}" -eq 0 ]]; then
-  echo "Clang resource headers were not found in ANDROID_NDK_HOME" >&2
-  exit 1
+if [[ -z "${CLANG_RESOURCE_INCLUDE:-}" ]]; then
+  shopt -s nullglob
+  clang_resource_include_candidates=("$LIBCLANG_PATH"/clang/*/include)
+  if [[ "${#clang_resource_include_candidates[@]}" -eq 0 ]]; then
+    clang_resource_include_candidates=("$ANDROID_NDK_HOME"/toolchains/llvm/prebuilt/*/lib/clang/*/include)
+  fi
+  shopt -u nullglob
+  if [[ "${#clang_resource_include_candidates[@]}" -eq 0 ]]; then
+    echo "Clang resource headers were not found for LIBCLANG_PATH or ANDROID_NDK_HOME" >&2
+    exit 1
+  fi
+  CLANG_RESOURCE_INCLUDE="${clang_resource_include_candidates[0]}"
 fi
-CLANG_RESOURCE_INCLUDE="${clang_resource_include_candidates[0]}"
+test -f "$CLANG_RESOURCE_INCLUDE/stdint.h"
 
 rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
 installed_cargo_ndk="$(cargo +"$RUST_TOOLCHAIN" ndk --version 2>/dev/null || true)"

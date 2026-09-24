@@ -85,6 +85,7 @@ jobs:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
           LIBCLANG_PATH: /usr/lib/llvm-18/lib
+          CLANG_RESOURCE_INCLUDE: /usr/lib/llvm-18/lib/clang/18/include
         run: |
           android-native/scripts/build-aether-android.sh
           android-native/scripts/build-deltachat-android.sh
@@ -298,6 +299,7 @@ jobs:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
           LIBCLANG_PATH: /usr/lib/llvm-18/lib
+          CLANG_RESOURCE_INCLUDE: /usr/lib/llvm-18/lib/clang/18/include
         run: |
           android-native/scripts/build-aether-android.sh
           android-native/scripts/build-deltachat-android.sh
