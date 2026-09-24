@@ -6,7 +6,8 @@ build/
 local.properties
 **/local.properties
 android-native/.aether-src/
-android-native/app/src/main/jniLibs/*/libaether.so
+android-native/.deltachat-src/
+android-native/.deltachat-build/
 captures/
 .externalNativeBuild/
 .cxx/

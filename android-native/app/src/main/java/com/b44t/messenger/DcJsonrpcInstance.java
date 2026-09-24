@@ -9,8 +9,14 @@ public class DcJsonrpcInstance {
   @Override
   protected void finalize() throws Throwable {
     super.finalize();
-    unrefJsonrpcInstanceCPtr();
-    jsonrpcInstanceCPtr = 0;
+    unref();
+  }
+
+  public void unref() {
+    if (jsonrpcInstanceCPtr != 0) {
+      unrefJsonrpcInstanceCPtr();
+      jsonrpcInstanceCPtr = 0;
+    }
   }
 
   public native void request(String request);

@@ -1,0 +1,136 @@
+name: Upstream Native Release Monitor
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: upstream-native-releases
+  cancel-in-progress: false
+
+jobs:
+  detect-new-stable-releases:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dependency: Aether
+            repository: CluvexStudio/Aether
+            pinned_tag: v2.1.0
+          - dependency: Delta Chat Android
+            repository: deltachat/deltachat-android
+            pinned_tag: v2.59.1
+    steps:
+      - name: Find latest stable upstream release
+        id: upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_REPOSITORY: ${{ matrix.repository }}
+          PINNED_TAG: ${{ matrix.pinned_tag }}
+        run: |
+          release="$(curl --fail --silent --show-error \
+            --retry 3 \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/$UPSTREAM_REPOSITORY/releases/latest")"
+          tag="$(jq -r '.tag_name' <<< "$release")"
+          test "$(jq -r '.draft' <<< "$release")" = "false"
+          test "$(jq -r '.prerelease' <<< "$release")" = "false"
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+          if [[ "$tag" == "$PINNED_TAG" ]]; then
+            printf 'update=false\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'update=true\n' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Reconcile dependency update issue
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          DEPENDENCY: ${{ matrix.dependency }}
+          UPSTREAM_REPOSITORY: ${{ matrix.repository }}
+          PINNED_TAG: ${{ matrix.pinned_tag }}
+          LATEST_TAG: ${{ steps.upstream.outputs.tag }}
+          UPDATE_AVAILABLE: ${{ steps.upstream.outputs.update }}
+        with:
+          script: |
+            const marker = `<!-- upstream-release-monitor:${process.env.UPSTREAM_REPOSITORY} -->`;
+            const title = `Track ${process.env.DEPENDENCY} stable releases`;
+            const updateBody = [
+              marker,
+              `${process.env.DEPENDENCY} has a newer stable upstream release.`,
+              '',
+              `- Repository: https://github.com/${process.env.UPSTREAM_REPOSITORY}`,
+              `- Pinned tag: \`${process.env.PINNED_TAG}\``,
+              `- Latest stable tag: \`${process.env.LATEST_TAG}\``,
+              '',
+              'This monitor intentionally does not mutate build inputs. Update the pinned tag and commit, regenerate bindings where applicable, rebuild the native artifacts, run unit and instrumentation tests, inspect both per-ABI APKs, and then publish intentionally.'
+            ].join('\n');
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'all',
+              per_page: 100
+            });
+            const matches = issues
+              .filter(issue => !issue.pull_request && issue.body?.includes(marker))
+              .sort((a, b) => a.number - b.number);
+            const existing = matches[0];
+            for (const duplicate of matches.slice(1)) {
+              const supersededBody = [
+                `<!-- superseded-upstream-release-monitor:${process.env.UPSTREAM_REPOSITORY} -->`,
+                `Superseded by #${existing.number}, the stable monitor issue for ${process.env.DEPENDENCY}.`
+              ].join('\n');
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: duplicate.number,
+                title: `${title} (superseded)`,
+                body: supersededBody,
+                state: 'closed',
+                state_reason: 'not_planned'
+              });
+            }
+            if (process.env.UPDATE_AVAILABLE === 'true') {
+              if (existing) {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: existing.number,
+                  title,
+                  body: updateBody,
+                  state: 'open'
+                });
+              } else {
+                await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title,
+                  body: updateBody
+                });
+              }
+            } else if (existing) {
+              const currentBody = [
+                marker,
+                `${process.env.DEPENDENCY} is current.`,
+                '',
+                `- Repository: https://github.com/${process.env.UPSTREAM_REPOSITORY}`,
+                `- Pinned tag: \`${process.env.PINNED_TAG}\``,
+                `- Latest stable tag: \`${process.env.LATEST_TAG}\``
+              ].join('\n');
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                title,
+                body: currentBody,
+                state: 'closed',
+                state_reason: 'completed'
+              });
+            }

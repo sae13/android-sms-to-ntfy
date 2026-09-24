@@ -12,11 +12,22 @@ val hasReleaseSigning = listOf(
     releaseKeyAlias,
     releaseKeyPassword
 ).all { it.isPresent }
-val releaseVersionCode = providers.environmentVariable("ANDROID_VERSION_CODE")
-    .map(String::toInt)
-    .orElse(18)
-val releaseVersionName = providers.environmentVariable("ANDROID_VERSION_NAME")
-    .orElse("1.0.18")
+val releaseVersionCodeOverride = providers.environmentVariable("ANDROID_VERSION_CODE")
+val releaseVersionNameOverride = providers.environmentVariable("ANDROID_VERSION_NAME")
+val releaseVersionCode = releaseVersionCodeOverride
+    .map { value ->
+        val parsed = value.toLongOrNull()
+            ?: throw GradleException("ANDROID_VERSION_CODE must be a positive integer.")
+        if (parsed !in 1..2_100_000_000) {
+            throw GradleException(
+                "ANDROID_VERSION_CODE must be between 1 and Android's maximum 2100000000."
+            )
+        }
+        parsed.toInt()
+    }
+    .orElse(19)
+val releaseVersionName = releaseVersionNameOverride
+    .orElse("1.0.19")
 val releaseAbi = providers.environmentVariable("ANDROID_RELEASE_ABI")
     .orElse("")
 
@@ -88,6 +99,12 @@ android {
         viewBinding = true
     }
 
+    sourceSets {
+        getByName("main") {
+            assets.srcDir("src/main/nativeNotices")
+        }
+    }
+
     packaging {
         jniLibs {
             useLegacyPackaging = true
@@ -100,6 +117,12 @@ android {
 
 tasks.matching { it.name == "assembleRelease" || it.name == "bundleRelease" }.configureEach {
     doFirst {
+        check(releaseVersionCodeOverride.isPresent && releaseVersionNameOverride.isPresent) {
+            "Release version metadata is required. Set ANDROID_VERSION_CODE and ANDROID_VERSION_NAME."
+        }
+        check(releaseVersionName.get().isNotBlank()) {
+            "ANDROID_VERSION_NAME must not be blank."
+        }
         check(hasReleaseSigning) {
             "Release signing is required. Set ANDROID_RELEASE_KEYSTORE, " +
                 "ANDROID_RELEASE_STORE_PASSWORD, ANDROID_RELEASE_KEY_ALIAS, and " +

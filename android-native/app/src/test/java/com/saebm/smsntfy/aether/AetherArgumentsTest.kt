@@ -42,7 +42,7 @@ class AetherArgumentsTest {
                 "--wg-config", "/data/user/0/com.saebm.smsntfy/no_backup/aether/aether-wg.toml",
                 "--masque-config", "/data/user/0/com.saebm.smsntfy/no_backup/aether/aether-masque.toml"
             )))
-            // v1.9.0 auto-tunes flow-control windows; --perf must not override them.
+            // v2.1.0 auto-tunes flow-control windows; --perf must not override them.
             assertTrue(!command.contains("--perf"))
         }
         assertTrue(commands[0].containsAll(listOf("--scan", "balanced")))

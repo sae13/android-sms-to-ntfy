@@ -8,7 +8,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo.Id;
 import com.fasterxml.jackson.annotation.JsonTypeInfo.As;
 
 @JsonTypeInfo(use=Id.NAME, include=As.PROPERTY, property="kind")
-@JsonSubTypes({@Type(value = MessageListItem.Message.class, name="Message"), @Type(value = MessageListItem.DayMarker.class, name="DayMarker")})
+@JsonSubTypes({@Type(value = MessageListItem.Message.class, name="message"), @Type(value = MessageListItem.DayMarker.class, name="dayMarker")})
 public abstract class MessageListItem {
 
   public static class Message extends MessageListItem {

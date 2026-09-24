@@ -1,2 +1,5 @@
 # Preserve Windows launcher line endings without false whitespace errors.
 *.bat text eol=crlf whitespace=cr-at-eol
+
+# Native release inputs are binary artifacts; never apply text conversion.
+android-native/app/src/main/jniLibs/**/*.so binary

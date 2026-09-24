@@ -8,7 +8,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo.Id;
 import com.fasterxml.jackson.annotation.JsonTypeInfo.As;
 
 @JsonTypeInfo(use=Id.NAME, include=As.PROPERTY, property="kind")
-@JsonSubTypes({@Type(value = EphemeralTimer.Disabled.class, name="Disabled"), @Type(value = EphemeralTimer.Enabled.class, name="Enabled")})
+@JsonSubTypes({@Type(value = EphemeralTimer.Disabled.class, name="disabled"), @Type(value = EphemeralTimer.Enabled.class, name="enabled")})
 public abstract class EphemeralTimer {
 
 /** Timer is disabled. */

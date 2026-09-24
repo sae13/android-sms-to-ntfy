@@ -15,6 +15,20 @@ on:
       - 'android-native/**'
       - '.github/workflows/android-native.yml'
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Build and publish signed production APKs after ARM smoke tests'
+        required: false
+        default: false
+        type: boolean
+      version_code:
+        description: 'New Android versionCode (must exceed the latest published release)'
+        required: false
+        type: string
+      version_name:
+        description: 'Android versionName for the production release'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -42,11 +56,16 @@ jobs:
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
 
-      - name: Set up Rust 1.88
+      - name: Set up pinned Rust toolchains
         uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
         with:
-          toolchain: '1.88.0'
+          toolchain: '1.91.1'
           targets: aarch64-linux-android,armv7-linux-androideabi
+
+      - name: Set up Aether Rust toolchain
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal
+          rustup target add --toolchain 1.98.0 aarch64-linux-android armv7-linux-androideabi
 
       - name: Set up Android NDK r26d
         id: ndk
@@ -55,19 +74,34 @@ jobs:
           ndk-version: r26d
           local-cache: false
 
-      - name: Build pinned Aether core for supported Android ABIs
+      - name: Build pinned native cores
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
-        run: android-native/scripts/build-aether-android.sh
+        run: |
+          android-native/scripts/build-aether-android.sh
+          android-native/scripts/build-deltachat-android.sh
 
-      - name: Verify Aether binaries and notices
+      - name: Verify native binaries, synchronized bindings, and notices
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
         run: |
           for abi in arm64-v8a armeabi-v7a; do
             test -s "android-native/app/src/main/jniLibs/$abi/libaether.so"
           done
+          android-native/scripts/verify-deltachat-android.sh
           test -s android-native/app/src/main/assets/aether/AGPL-3.0.txt
-          grep -q 311b573352bb67e494895ff67d20b002d075116a android-native/app/src/main/assets/aether/NOTICE.md
+          test -s android-native/app/src/main/jniLibs/DELTACHAT-LICENSE.txt
+          grep -q 6398931aeaa551248530cc164aea6d5f2c5fe4a2 android-native/app/src/main/assets/aether/NOTICE.md
+          android-native/scripts/sync-deltachat-android.sh
+          git diff --exit-code -- \
+            android-native/app/src/main/java/com/b44t/messenger \
+            android-native/app/src/main/java/chat/delta/rpc \
+            android-native/app/src/main/jniLibs/DELTACHAT-LICENSE.txt \
+            android-native/app/src/main/jniLibs/DELTACHAT-NOTICE.md \
+            android-native/app/src/main/jniLibs/arm64-v8a/libnative-utils.so \
+            android-native/app/src/main/jniLibs/armeabi-v7a/libnative-utils.so \
+            android-native/app/src/main/nativeNotices/deltachat
 
       - name: Ensure Gradle wrapper is executable
         run: chmod +x android-native/gradlew
@@ -76,21 +110,127 @@ jobs:
         working-directory: android-native
         run: ./gradlew testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --console=plain
 
-      - name: Verify debug APK contains Aether and notices
+      - name: Verify debug APK contains native cores and notices
         run: |
           unzip -Z1 android-native/app/build/outputs/apk/debug/app-debug.apk > "$RUNNER_TEMP/debug-apk-entries.txt"
           for abi in arm64-v8a armeabi-v7a; do
             grep -Fx "lib/$abi/libaether.so" "$RUNNER_TEMP/debug-apk-entries.txt"
+            grep -Fx "lib/$abi/libnative-utils.so" "$RUNNER_TEMP/debug-apk-entries.txt"
           done
+          test "$(grep -Ec '^lib/(arm64-v8a|armeabi-v7a)/libnative-utils\.so$' "$RUNNER_TEMP/debug-apk-entries.txt")" = "2"
+          ! grep -Eq '^lib/(arm64-v8a|armeabi-v7a)/libdeltachat\.so$' "$RUNNER_TEMP/debug-apk-entries.txt"
           grep -Fx 'assets/aether/AGPL-3.0.txt' "$RUNNER_TEMP/debug-apk-entries.txt"
+          grep -Fx 'assets/aether/NOTICE.md' "$RUNNER_TEMP/debug-apk-entries.txt"
+          grep -Fx 'assets/deltachat/LICENSE.txt' "$RUNNER_TEMP/debug-apk-entries.txt"
+          grep -Fx 'assets/deltachat/NOTICE.md' "$RUNNER_TEMP/debug-apk-entries.txt"
+
+      - name: Upload application and instrumentation APKs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: android-native-debug-instrumentation
+          path: |
+            android-native/app/build/outputs/apk/debug/app-debug.apk
+            android-native/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          if-no-files-found: error
+          retention-days: 1
+
+  arm-device-smoke:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release
+    needs: build
+    runs-on: [self-hosted, linux, arm64]
+    timeout-minutes: 20
+    steps:
+      - name: Download application and instrumentation APKs from the tested build
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: android-native-debug-instrumentation
+          path: smoke-apks
+
+      - name: Run native smoke tests on the attached ARM device
+        env:
+          CONFIGURED_ANDROID_SERIAL: ${{ vars.ANDROID_ARM_DEVICE_SERIAL }}
+        run: |
+          command -v adb >/dev/null
+          if [[ -n "$CONFIGURED_ANDROID_SERIAL" ]]; then
+            ANDROID_SERIAL="$CONFIGURED_ANDROID_SERIAL"
+          else
+            mapfile -t connected_devices < <(adb devices | awk 'NR > 1 && $2 == "device" {print $1}')
+            test "${#connected_devices[@]}" = "1"
+            ANDROID_SERIAL="${connected_devices[0]}"
+          fi
+          test "$(adb -s "$ANDROID_SERIAL" get-state)" = "device"
+          device_abi="$(adb -s "$ANDROID_SERIAL" shell getprop ro.product.cpu.abi | tr -d '\r')"
+          case "$device_abi" in
+            arm64-v8a|armeabi-v7a) ;;
+            *) printf 'Expected an ARM Android device, got %s\n' "$device_abi" >&2; exit 1 ;;
+          esac
+          app_apk=smoke-apks/app-debug.apk
+          test_apk=smoke-apks/app-debug-androidTest.apk
+          test -s "$app_apk"
+          test -s "$test_apk"
+          adb -s "$ANDROID_SERIAL" install -r "$app_apk"
+          adb -s "$ANDROID_SERIAL" install -r -t "$test_apk"
+          set +e
+          timeout 300s adb -s "$ANDROID_SERIAL" shell am instrument -w -r \
+            -e class com.saebm.smsntfy.aether.AetherProcessInstrumentedTest,com.saebm.smsntfy.deltachat.NativeDeltaChatSmokeInstrumentedTest \
+            com.saebm.smsntfy.test/androidx.test.runner.AndroidJUnitRunner \
+            | tee "$RUNNER_TEMP/instrumentation.txt"
+          instrumentation_status="${PIPESTATUS[0]}"
+          set -e
+          test "$instrumentation_status" = "0"
+          grep -Eq '^OK \(2 tests?\)$' "$RUNNER_TEMP/instrumentation.txt"
+          ! grep -Eq 'FAILURES!!!|INSTRUMENTATION_FAILED|shortMsg=Process crashed' "$RUNNER_TEMP/instrumentation.txt"
+
+  validate-release-metadata:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release
+    needs: arm-device-smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version_code: ${{ steps.metadata.outputs.version_code }}
+      version_name: ${{ steps.metadata.outputs.version_name }}
+    steps:
+      - name: Require monotonic release metadata
+        id: metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION_CODE: ${{ inputs.version_code }}
+          VERSION_NAME: ${{ inputs.version_name }}
+        run: |
+          [[ "$VERSION_CODE" =~ ^[1-9][0-9]*$ ]]
+          test -n "$VERSION_NAME"
+          api_status=0
+          latest_release="$(gh api "repos/$GH_REPO/releases/latest" 2>"$RUNNER_TEMP/latest-release-error.txt")" || api_status=$?
+          if [[ "$api_status" -eq 0 ]]; then
+            latest_code="$(jq -er '.body | capture("versionCode: (?<code>[0-9]+)").code' <<< "$latest_release")"
+            [[ "$latest_code" =~ ^[1-9][0-9]*$ ]]
+          elif grep -Eq 'HTTP 404|status.? 404|Not Found \(HTTP 404\)' "$RUNNER_TEMP/latest-release-error.txt"; then
+            latest_code=0
+          else
+            cat "$RUNNER_TEMP/latest-release-error.txt" >&2
+            exit "$api_status"
+          fi
+          if (( VERSION_CODE > 2100000000 )); then
+            printf 'versionCode %s exceeds Android maximum 2100000000\n' "$VERSION_CODE" >&2
+            exit 1
+          fi
+          if (( VERSION_CODE <= latest_code )); then
+            printf 'versionCode %s must be greater than latest published versionCode %s\n' \
+              "$VERSION_CODE" "$latest_code" >&2
+            exit 1
+          fi
+          printf 'version_code=%s\n' "$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          printf 'version_name=%s\n' "$VERSION_NAME" >> "$GITHUB_OUTPUT"
 
   release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release
+    needs: validate-release-metadata
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
-      contents: write
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -100,7 +240,6 @@ jobs:
           - abi: armeabi-v7a
             asset: sms-ntfy-android-native-armeabi-v7a.apk
     env:
-      RELEASE_TAG: android-native-${{ github.sha }}
       RELEASE_APK: android-native/app/build/outputs/apk/release/app-release.apk
       RELEASE_ASSET: ${{ matrix.asset }}
       ANDROID_RELEASE_ABI: ${{ matrix.abi }}
@@ -108,8 +247,8 @@ jobs:
       ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
       ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
       ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
-      ANDROID_VERSION_CODE: 18
-      ANDROID_VERSION_NAME: 1.0.18
+      ANDROID_VERSION_CODE: ${{ needs.validate-release-metadata.outputs.version_code }}
+      ANDROID_VERSION_NAME: ${{ needs.validate-release-metadata.outputs.version_name }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -123,11 +262,16 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
 
-      - name: Set up Rust 1.88
+      - name: Set up pinned Rust toolchains
         uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
         with:
-          toolchain: '1.88.0'
+          toolchain: '1.91.1'
           targets: aarch64-linux-android,armv7-linux-androideabi
+
+      - name: Set up Aether Rust toolchain
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal
+          rustup target add --toolchain 1.98.0 aarch64-linux-android armv7-linux-androideabi
 
       - name: Set up Android NDK r26d
         id: ndk
@@ -136,11 +280,13 @@ jobs:
           ndk-version: r26d
           local-cache: false
 
-      - name: Build pinned Aether core
+      - name: Build pinned native cores
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
-        run: android-native/scripts/build-aether-android.sh
+        run: |
+          android-native/scripts/build-aether-android.sh
+          android-native/scripts/build-deltachat-android.sh
 
       - name: Restore stable release keystore
         env:
@@ -165,13 +311,24 @@ jobs:
           test -s "$RELEASE_APK"
           BUILD_TOOLS_DIR="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V | tail -1)"
           "$ANDROID_HOME/build-tools/$BUILD_TOOLS_DIR/apksigner" verify --verbose "$RELEASE_APK"
+          APK_VERSION_CODE="$("$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest version-code "$RELEASE_APK")"
+          APK_VERSION_NAME="$("$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest version-name "$RELEASE_APK")"
+          test "$APK_VERSION_CODE" = "$ANDROID_VERSION_CODE"
+          test "$APK_VERSION_NAME" = "$ANDROID_VERSION_NAME"
           sha256sum "$RELEASE_APK"
           unzip -t "$RELEASE_APK"
           unzip -Z1 "$RELEASE_APK" > "$RUNNER_TEMP/release-apk-entries.txt"
           grep -Fx "lib/$ANDROID_RELEASE_ABI/libaether.so" "$RUNNER_TEMP/release-apk-entries.txt"
           test "$(grep -Ec '^lib/(arm64-v8a|armeabi-v7a)/libaether\.so$' "$RUNNER_TEMP/release-apk-entries.txt")" = "1"
+          grep -Fx "lib/$ANDROID_RELEASE_ABI/libnative-utils.so" "$RUNNER_TEMP/release-apk-entries.txt"
+          test "$(grep -Ec '^lib/(arm64-v8a|armeabi-v7a)/libnative-utils\.so$' "$RUNNER_TEMP/release-apk-entries.txt")" = "1"
+          ! grep -Eq '^lib/(arm64-v8a|armeabi-v7a)/libdeltachat\.so$' "$RUNNER_TEMP/release-apk-entries.txt"
           grep -Fx 'assets/aether/AGPL-3.0.txt' "$RUNNER_TEMP/release-apk-entries.txt"
           grep -Fx 'assets/aether/NOTICE.md' "$RUNNER_TEMP/release-apk-entries.txt"
+          grep -Fx 'assets/deltachat/LICENSE.txt' "$RUNNER_TEMP/release-apk-entries.txt"
+          grep -Fx 'assets/deltachat/NOTICE.md' "$RUNNER_TEMP/release-apk-entries.txt"
+          unzip -p "$RELEASE_APK" assets/aether/NOTICE.md | grep -q 6398931aeaa551248530cc164aea6d5f2c5fe4a2
+          unzip -p "$RELEASE_APK" assets/deltachat/NOTICE.md | grep -q 16077915337231143f9ae4c6fe7ed2fe920044b9
           cp "$RELEASE_APK" "$RUNNER_TEMP/$RELEASE_ASSET"
 
       - name: Upload per-ABI release artifact
@@ -183,14 +340,16 @@ jobs:
           retention-days: 7
 
   publish-release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: release
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release
+    needs: [validate-release-metadata, release]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
       GH_REPO: ${{ github.repository }}
       RELEASE_TAG: android-native-${{ github.sha }}
+      ANDROID_VERSION_CODE: ${{ needs.validate-release-metadata.outputs.version_code }}
+      ANDROID_VERSION_NAME: ${{ needs.validate-release-metadata.outputs.version_name }}
     steps:
       - name: Download per-ABI APKs
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -206,17 +365,24 @@ jobs:
           mapfile -t assets < <(find release-assets -maxdepth 1 -type f -name '*.apk' -print | sort)
           test "${#assets[@]}" = "2"
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
-            gh release edit "$RELEASE_TAG" \
-              --title "Android Native latest" \
-              --notes "Per-ABI Android releases from main commit $GITHUB_SHA. versionCode: 18; versionName: 1.0.18" \
-              --latest
-          else
-            gh release create "$RELEASE_TAG" "${assets[@]}" \
-              --target "$GITHUB_SHA" \
-              --title "Android Native latest" \
-              --notes "Per-ABI Android releases from main commit $GITHUB_SHA. versionCode: 18; versionName: 1.0.18" \
-              --latest
+            printf 'Release tag %s already exists; refusing to overwrite published assets.\n' "$RELEASE_TAG" >&2
+            exit 1
           fi
-          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')" = "false"
-          test "$(gh release view "$RELEASE_TAG" --json assets --jq '[.assets[] | select((.name | test("^sms-ntfy-android-native-(arm64-v8a|armeabi-v7a)\\.apk$")) and .size > 0)] | length')" = "2"
+          release_notes="Per-ABI Android releases from main commit $GITHUB_SHA. versionCode: $ANDROID_VERSION_CODE; versionName: $ANDROID_VERSION_NAME"
+          gh release create "$RELEASE_TAG" "${assets[@]}" \
+            --target "$GITHUB_SHA" \
+            --title "Android Native $ANDROID_VERSION_NAME" \
+            --notes "$release_notes" \
+            --latest
+          release_json="$(gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG")"
+          test "$(jq -r '.draft' <<< "$release_json")" = "false"
+          test "$(jq -r '.prerelease' <<< "$release_json")" = "false"
+          test "$(jq -r '.tag_name' <<< "$release_json")" = "$RELEASE_TAG"
+          tag_object="$(gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG")"
+          tag_type="$(jq -r '.object.type' <<< "$tag_object")"
+          tag_sha="$(jq -r '.object.sha' <<< "$tag_object")"
+          if [[ "$tag_type" == "tag" ]]; then
+            tag_sha="$(gh api "repos/$GH_REPO/git/tags/$tag_sha" --jq '.object.sha')"
+          fi
+          test "$tag_sha" = "$GITHUB_SHA"
+          test "$(jq '[.assets[] | select((.name | test("^sms-ntfy-android-native-(arm64-v8a|armeabi-v7a)\\.apk$")) and .size > 0)] | length' <<< "$release_json")" = "2"

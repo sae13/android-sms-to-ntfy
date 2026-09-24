@@ -15,6 +15,10 @@ public class DcEventChannel {
     }
   }
 
+  public DcEventEmitter getEventEmitter() {
+    return new DcEventEmitter(getEventEmitterCPtr());
+  }
+
   // working with raw c-data
   private long eventChannelCPtr; // CAVE: the name is referenced in the JNI
 

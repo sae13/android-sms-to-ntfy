@@ -8,7 +8,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo.Id;
 import com.fasterxml.jackson.annotation.JsonTypeInfo.As;
 
 @JsonTypeInfo(use=Id.NAME, include=As.PROPERTY, property="kind")
-@JsonSubTypes({@Type(value = MessageLoadResult.Message.class, name="Message"), @Type(value = MessageLoadResult.LoadingError.class, name="LoadingError")})
+@JsonSubTypes({@Type(value = MessageLoadResult.Message.class, name="message"), @Type(value = MessageLoadResult.LoadingError.class, name="loadingError")})
 public abstract class MessageLoadResult {
 
   public static class Message extends MessageLoadResult {

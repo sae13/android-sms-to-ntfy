@@ -20,6 +20,10 @@ public class DcAccounts {
     }
   }
 
+  public DcEventEmitter getEventEmitter() {
+    return new DcEventEmitter(getEventEmitterCPtr());
+  }
+
   public DcJsonrpcInstance getJsonrpcInstance() {
     return new DcJsonrpcInstance(getJsonrpcInstanceCPtr());
   }
@@ -41,6 +45,14 @@ public class DcAccounts {
   public native boolean removeAccount(int accountId);
 
   public native int[] getAll();
+
+  public DcContext getAccount(int accountId) {
+    return new DcContext(getAccountCPtr(accountId));
+  }
+
+  public DcContext getSelectedAccount() {
+    return new DcContext(getSelectedAccountCPtr());
+  }
 
   public native boolean selectAccount(int accountId);
 

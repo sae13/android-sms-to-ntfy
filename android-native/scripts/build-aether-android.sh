@@ -2,16 +2,22 @@
 set -euo pipefail
 
 AETHER_REPOSITORY="https://github.com/CluvexStudio/Aether.git"
-AETHER_COMMIT="311b573352bb67e494895ff67d20b002d075116a"
-RUST_TOOLCHAIN="1.91.0"
-CARGO_NDK_VERSION="4.1.2"
+AETHER_TAG="v2.1.0"
+AETHER_COMMIT="6398931aeaa551248530cc164aea6d5f2c5fe4a2"
+RUST_TOOLCHAIN="1.98.0"
+CARGO_NDK_VERSION="3.5.4"
+ANDROID_NDK_VERSION="26.3.11579264"
 ANDROID_PLATFORM="24"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SOURCE="${AETHER_SOURCE_DIR:-$ROOT/.aether-src}"
 OUT="${AETHER_OUTPUT_DIR:-$ROOT/app/src/main/jniLibs}"
 AETHER_ABIS="${AETHER_ABIS:-arm64-v8a armeabi-v7a}"
 
-: "${ANDROID_NDK_HOME:?Set ANDROID_NDK_HOME to an Android NDK r26d installation}"
+ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+if [[ -z "${ANDROID_NDK_HOME:-}" ]]; then
+  : "${ANDROID_SDK_ROOT:?Set ANDROID_SDK_ROOT/ANDROID_HOME or ANDROID_NDK_HOME}"
+  ANDROID_NDK_HOME="$ANDROID_SDK_ROOT/ndk/$ANDROID_NDK_VERSION"
+fi
 test -d "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt"
 shopt -s nullglob
 ndk_clang_candidates=("$ANDROID_NDK_HOME"/toolchains/llvm/prebuilt/*/bin/clang)
@@ -33,8 +39,13 @@ if [[ -z "${LIBCLANG_PATH:-}" ]]; then
     echo "libclang.so was not found in ANDROID_NDK_HOME" >&2
     exit 1
   fi
-  export LIBCLANG_PATH="$(dirname "${libclang_candidates[0]}")"
+  LIBCLANG_PATH="$(dirname "${libclang_candidates[0]}")"
+  export LIBCLANG_PATH
 fi
+
+# bindgen uses the host libclang. Point it at the Android sysroot so standard
+# C headers resolve while generating BoringSSL bindings for each target.
+export BINDGEN_EXTRA_CLANG_ARGS="${BINDGEN_EXTRA_CLANG_ARGS:-} --sysroot=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot -isystem $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/include"
 
 rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
 installed_cargo_ndk="$(cargo +"$RUST_TOOLCHAIN" ndk --version 2>/dev/null || true)"
@@ -61,13 +72,20 @@ rustup target add --toolchain "$RUST_TOOLCHAIN" "${rust_targets[@]}"
 if [[ ! -d "$SOURCE/.git" ]]; then
   git clone --filter=blob:none --no-checkout "$AETHER_REPOSITORY" "$SOURCE"
 fi
-git -C "$SOURCE" fetch --depth 1 origin "$AETHER_COMMIT"
+git -C "$SOURCE" fetch --depth 1 origin "refs/tags/$AETHER_TAG:refs/tags/$AETHER_TAG"
+test "$(git -C "$SOURCE" rev-parse "$AETHER_TAG^{}")" = "$AETHER_COMMIT"
 git -C "$SOURCE" checkout --detach --force "$AETHER_COMMIT"
 git -C "$SOURCE" reset --hard "$AETHER_COMMIT"
 git -C "$SOURCE" clean -ffdx
 test "$(git -C "$SOURCE" rev-parse HEAD)" = "$AETHER_COMMIT"
 test -z "$(git -C "$SOURCE" status --porcelain --untracked-files=all)"
 test -f "$SOURCE/aether/Cargo.lock"
+test "$(python3 - "$SOURCE/aether/Cargo.toml" <<'PY'
+import sys, tomllib
+with open(sys.argv[1], "rb") as manifest:
+    print(tomllib.load(manifest)["package"]["version"])
+PY
+)" = "2.1.0"
 
 mkdir -p "$OUT"
 for abi in "${requested_abis[@]}"; do
